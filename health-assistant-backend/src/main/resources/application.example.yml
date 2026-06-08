@@ -1,14 +1,12 @@
 # --------------------------------------------------------
-# 智能健康助手核心配置文件 (application.yml)
+# 智能健康助手配置模板
+# 复制为 application.yml 并填入真实值
 # --------------------------------------------------------
 
 server:
   port: 8080
   servlet:
     context-path: /api
-  tomcat:
-    max-threads: 200
-    connection-timeout: 20000
 
 spring:
   application:
@@ -17,10 +15,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/smart_health_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false
     username: root
-    password: a82711045
-  mvc:
-    pathmatch:
-      matching-strategy: ant_path_matcher
+    password: ${MYSQL_PASSWORD:你的数据库密码}
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
@@ -34,29 +29,22 @@ mybatis-plus:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
-# Redis 配置 (排行榜缓存)
 spring.data.redis.host: ${SPRING_DATA_REDIS_HOST:localhost}
 spring.data.redis.port: ${SPRING_DATA_REDIS_PORT:6379}
 
-# 文件上传配置
 upload:
   avatar:
     max-size: 5242880
     path: ./uploads/avatars/
 
-# JWT 鉴权配置
 jwt:
-  secret: Y29tcGxleF9zZWNyZXRfa2V5X2Zvcl9zbWFydF9oZWFsdGhfMjAyNg==
-  expiration: 86400000  # 令牌生命周期: 24小时
+  secret: 你的JWT密钥Base64
+  expiration: 86400000
 
-# --------------------------------------------------------
-# 深度集成 DeepSeek 大模型核心配置
-# --------------------------------------------------------
 llm:
   deepseek:
     base-url: https://api.deepseek.com
-    api-key: ${DEEPSEEK_API_KEY:sk-d2c2374ea93e4f7d8d55a3624a33839d}
-    # 严格指定 V4 Pro 版本
+    api-key: ${DEEPSEEK_API_KEY:你的DeepSeek API Key}
     model: deepseek-v4-pro
     timeout-ms: 120000
     temperature: 0.2

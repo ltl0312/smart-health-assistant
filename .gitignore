@@ -41,6 +41,10 @@ uploads/
 .env
 .env.local
 *.env.local
+application-local.yml
+application.yml
+*.pem
+*.key
 
 # ========================
 # OS
