@@ -5,6 +5,7 @@ import com.hnust.health.dto.LoginRequest;
 import com.hnust.health.dto.LoginResponse;
 import com.hnust.health.dto.RegisterRequest;
 import com.hnust.health.exception.BusinessException;
+import com.hnust.health.mapper.HealthProfileMapper;
 import com.hnust.health.mapper.SysUserMapper;
 import com.hnust.health.model.SysUser;
 import com.hnust.health.security.JwtUtil;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Service;
 public class AuthServiceImpl implements AuthService {
 
     private final SysUserMapper sysUserMapper;
+    private final HealthProfileMapper healthProfileMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
 
@@ -63,8 +65,8 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(401, "用户名或密码错误");
         }
 
-        // 签发 JWT
         String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole());
-        return new LoginResponse(token, user.getUsername(), user.getId(), user.getRole());
+        boolean hasProfile = healthProfileMapper.selectById(user.getId()) != null;
+        return new LoginResponse(token, user.getUsername(), user.getId(), user.getRole(), hasProfile);
     }
 }

@@ -39,6 +39,7 @@
       <RankView v-if="activeView === 'rank'" :key="'rank'+refreshKey" />
       <SettingsView v-if="activeView === 'settings'" @logout="handleLogout" @refresh="refreshKey++" />
     </main>
+    <OnboardingModal v-if="showOnboarding" @done="showOnboarding=false" />
   </div>
 </template>
 
@@ -49,11 +50,13 @@ import DashboardView from '@/views/DashboardView.vue'
 import ProfileView from '@/views/ProfileView.vue'
 import RankView from '@/views/RankView.vue'
 import SettingsView from '@/views/SettingsView.vue'
+import OnboardingModal from '@/components/OnboardingModal.vue'
 
 const userStore = useUserStore()
 const isLoggedIn = computed(() => userStore.isLoggedIn)
 const activeView = ref(localStorage.getItem('activeView') || 'dashboard')
 const refreshKey = ref(0)
+const showOnboarding = ref(false)
 const tabs = [{ id: 'dashboard', label: '今日看板' },{ id: 'profile', label: '健康档案' },{ id: 'rank', label: '排行榜' }]
 const avatarUrl = computed(() => userStore.userInfo?.avatarUrl)
 const initial = computed(() => (userStore.userInfo?.nickname || userStore.userInfo?.username || '?')[0].toUpperCase())
@@ -67,8 +70,8 @@ const loginError = ref('')
 async function handleLogin() {
   loginError.value = ''; loginLoading.value = true
   try {
-    if (isRegister.value) { await userStore.register(loginForm.username, loginForm.password, loginForm.email); await userStore.login(loginForm.username, loginForm.password) }
-    else await userStore.login(loginForm.username, loginForm.password)
+    if (isRegister.value) { await userStore.register(loginForm.username, loginForm.password, loginForm.email); await userStore.login(loginForm.username, loginForm.password); showOnboarding.value = true }
+    else { const r = await userStore.login(loginForm.username, loginForm.password); if (!r.hasProfile) showOnboarding.value = true }
     document.documentElement.classList.add('dark')
   } catch (e) { loginError.value = e.message || '操作失败' } finally { loginLoading.value = false }
 }

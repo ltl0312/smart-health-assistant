@@ -3,6 +3,7 @@ package com.hnust.health.service.impl;
 import com.hnust.health.dto.LoginRequest;
 import com.hnust.health.dto.RegisterRequest;
 import com.hnust.health.exception.BusinessException;
+import com.hnust.health.mapper.HealthProfileMapper;
 import com.hnust.health.mapper.SysUserMapper;
 import com.hnust.health.model.SysUser;
 import com.hnust.health.security.JwtUtil;
@@ -22,6 +23,7 @@ import static org.mockito.Mockito.*;
 class AuthServiceImplTest {
 
     @Mock SysUserMapper sysUserMapper;
+    @Mock HealthProfileMapper healthProfileMapper;
     @Mock PasswordEncoder passwordEncoder;
     @Mock JwtUtil jwtUtil;
     @InjectMocks AuthServiceImpl authService;

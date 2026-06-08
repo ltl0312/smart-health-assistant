@@ -12,26 +12,8 @@ import java.util.*;
 public class MarkdownGenerator {
 
     private static final ObjectMapper om = new ObjectMapper();
-    private static final Map<String, String> CN = new LinkedHashMap<>();
-    static {
-        CN.put("daily_calories", "每日热量目标"); CN.put("daily_calorie_target", "每日热量目标");
-        CN.put("macronutrient_split", "宏量营养素分配"); CN.put("macros", "宏量营养素");
-        CN.put("sample_menu", "示例菜单"); CN.put("sample_week", "一周食谱");
-        CN.put("weekly_schedule", "每周训练安排"); CN.put("daily_meals", "每日餐食");
-        CN.put("protein_g", "蛋白质"); CN.put("fat_g", "脂肪"); CN.put("carbs_g", "碳水");
-        CN.put("protein", "蛋白质"); CN.put("fat", "脂肪"); CN.put("carbs", "碳水");
-        CN.put("calories", "热量"); CN.put("total_calories", "总热量");
-        CN.put("meals", "餐次"); CN.put("meal", "餐别"); CN.put("foods", "食物清单");
-        CN.put("Breakfast", "早餐"); CN.put("Lunch", "午餐"); CN.put("Dinner", "晚餐"); CN.put("Snack", "加餐");
-        CN.put("day", "日期"); CN.put("type", "训练类型"); CN.put("exercises", "训练动作");
-        CN.put("duration_min", "时长"); CN.put("intensity", "强度"); CN.put("notes", "备注");
-        CN.put("Monday", "周一"); CN.put("Tuesday", "周二"); CN.put("Wednesday", "周三");
-        CN.put("Thursday", "周四"); CN.put("Friday", "周五"); CN.put("Saturday", "周六"); CN.put("Sunday", "周日");
-        CN.put("description", "趋势分析"); CN.put("startWeight", "起始体重");
-        CN.put("endWeight", "当前体重"); CN.put("totalChange", "总变化量"); CN.put("weeklyRate", "周均变化率");
-        CN.put("day1","第一天"); CN.put("day2","第二天"); CN.put("day3","第三天");
-        CN.put("day4","第四天"); CN.put("day5","第五天"); CN.put("day6","第六天"); CN.put("day7","第七天");
-    }
+    private static final String[] WEEK_EN = {"Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"};
+    private static final String[] WEEK_CN = {"周一","周二","周三","周四","周五","周六","周日"};
 
     // ===== 单份报告 =====
     public static String generatePlanReport(AiPlan plan) {
@@ -42,15 +24,19 @@ public class MarkdownGenerator {
         md.append("> **周期起始**：").append(plan.getCycleStartDate()).append("  \n");
         md.append("> **生成时间**：").append(time).append("\n\n---\n\n");
 
+        // 体重趋势
         md.append("## 📊 体重趋势分析\n\n");
-        renderSection(md, plan.getMemoryContextSnapshot());
+        md.append(formatSnapshot(plan.getMemoryContextSnapshot())).append("\n\n");
 
+        // 饮食表格
         md.append("## 🍽️ 饮食处方\n\n");
-        renderDiet(md, plan.getDietPlanJson());
+        md.append(formatDietTable(plan.getDietPlanJson())).append("\n\n");
 
+        // 运动表格
         md.append("## 🏃 运动处方\n\n");
-        renderWorkout(md, plan.getWorkoutPlanJson());
+        md.append(formatWorkoutTable(plan.getWorkoutPlanJson())).append("\n\n");
 
+        // AI推理
         if (plan.getLlmReasoningChain() != null && !plan.getLlmReasoningChain().isBlank()) {
             md.append("## 🧠 AI 推理过程\n\n> ").append(plan.getLlmReasoningChain()).append("\n\n");
         }
@@ -66,28 +52,28 @@ public class MarkdownGenerator {
             md.append("## 👤 基本信息\n\n");
             md.append("| 项目 | 数据 |\n|:------|:-----|\n");
             md.append("| **年龄** | ").append(profile.getAge()).append(" 岁 |\n");
-            md.append("| **性别** | ").append(gCN(profile.getGender())).append(" |\n");
+            md.append("| **性别** | ").append(profile.getGender()==1?"男":profile.getGender()==2?"女":"其他").append(" |\n");
             md.append("| **身高** | ").append(profile.getHeightCm()).append(" cm |\n");
             md.append("| **建档体重** | ").append(profile.getBaselineWeight()).append(" kg |\n");
-            md.append("| **活动水平** | ").append(aCN(profile.getActivityLevel())).append(" |\n");
-            md.append("| **饮食偏好** | ").append(dCN(profile.getDietPreference())).append(" |\n");
-            md.append("| **健康目标** | ").append(gCN2(profile.getHealthGoal())).append(" |\n\n");
+            md.append("| **活动水平** | ").append(labelAct(profile.getActivityLevel())).append(" |\n");
+            md.append("| **饮食偏好** | ").append(labelDiet(profile.getDietPreference())).append(" |\n");
+            md.append("| **健康目标** | ").append(labelGoal(profile.getHealthGoal())).append(" |\n\n");
         }
         if (weights != null && !weights.isEmpty()) {
             md.append("## ⚖️ 体重记录\n\n");
             md.append("| 日期 | 体重 (kg) | BMI |\n|:------|:----------|:----|\n");
             for (WeightRecord w : weights)
-                md.append("| ").append(w.getRecordDate()).append(" | **").append(w.getCurrentWeight()).append("** | ").append(w.getCalculatedBmi() != null ? w.getCalculatedBmi() : "--").append(" |\n");
+                md.append("| ").append(w.getRecordDate()).append(" | **").append(w.getCurrentWeight()).append("** | ").append(w.getCalculatedBmi()!=null?w.getCalculatedBmi():"--").append(" |\n");
             md.append("\n");
         }
         if (plans != null && !plans.isEmpty()) {
             md.append("## 🤖 AI 计划记录\n\n");
             for (AiPlan plan : plans) {
                 String t = plan.getCreatedAt() != null ? plan.getCreatedAt().format(DateTimeFormatter.ofPattern("MM-dd HH:mm")) : "";
-                md.append("### 📅 ").append(plan.getCycleStartDate()).append(t.isEmpty() ? "" : "（" + t + "）").append("\n\n");
-                md.append("**📊 趋势**："); appendSnap(md, plan.getMemoryContextSnapshot());
-                md.append("**🍽️ 饮食**："); appendDietS(md, plan.getDietPlanJson());
-                md.append("**🏃 运动**："); appendSportS(md, plan.getWorkoutPlanJson());
+                md.append("### 📅 ").append(plan.getCycleStartDate()).append(t.isEmpty()?"":"（"+t+"）").append("\n\n");
+                md.append("**📊 趋势**：").append(formatSnapshot(plan.getMemoryContextSnapshot())).append("  \n");
+                md.append("**🍽️ 饮食**：").append(dietSummary(plan.getDietPlanJson())).append("  \n");
+                md.append("**🏃 运动**：").append(workoutSummary(plan.getWorkoutPlanJson())).append("  \n");
                 if (plan.getLlmReasoningChain() != null && !plan.getLlmReasoningChain().isBlank())
                     md.append("**🧠 分析**：").append(plan.getLlmReasoningChain()).append("\n");
                 md.append("\n---\n\n");
@@ -97,147 +83,227 @@ public class MarkdownGenerator {
         return md.toString();
     }
 
-    // ===== 渲染：通用节点 → 列表 =====
-    private static void renderSection(StringBuilder md, String jsonStr) {
-        if (jsonStr == null || jsonStr.isBlank()) { md.append("*（无数据）*\n\n"); return; }
+    // ===== 趋势快照 → 文本 =====
+    private static String formatSnapshot(String jsonStr) {
+        if (jsonStr == null || jsonStr.isBlank()) return "无数据";
         try {
-            JsonNode root = om.readTree(jsonStr);
-            if (root.isObject()) writeKV(md, root);
-            else if (root.isArray()) for (JsonNode item : root) writeKV(md, item);
-        } catch (Exception e) { md.append(jsonStr).append("\n"); }
-        md.append("\n");
+            JsonNode n = om.readTree(jsonStr);
+            return n.has("description") ? n.get("description").asText() : "已记录";
+        } catch (Exception e) { return "已记录"; }
     }
 
-    private static void writeKV(StringBuilder md, JsonNode node) {
-        var it = node.fields();
-        while (it.hasNext()) {
-            var e = it.next();
-            String label = CN.getOrDefault(e.getKey(), e.getKey());
-            JsonNode v = e.getValue();
-            if (v.isNumber()) {
-                String u = e.getKey().contains("calorie") ? " kcal" : e.getKey().contains("weight") || e.getKey().contains("Weight") ? " kg" : e.getKey().contains("protein") || e.getKey().contains("fat") || e.getKey().contains("carbs") ? " g" : e.getKey().contains("duration") ? " 分钟" : e.getKey().contains("rate") ? " kg/周" : "";
-                md.append("- **").append(label).append("**：").append(v.asText()).append(u).append("\n");
-            } else if (v.isTextual()) {
-                md.append("- **").append(label).append("**：").append(v.asText()).append("\n");
-            }
-        }
-    }
-
-    // ===== 渲染：饮食 → 表格 =====
-    private static void renderDiet(StringBuilder md, String jsonStr) {
-        if (jsonStr == null || jsonStr.isBlank()) { md.append("*（无数据）*\n\n"); return; }
+    // ===== 饮食 → 完整表格 =====
+    private static String formatDietTable(String jsonStr) {
+        if (jsonStr == null || jsonStr.isBlank()) return "*（暂无饮食处方）*";
         try {
             JsonNode root = om.readTree(jsonStr);
+            StringBuilder t = new StringBuilder();
 
-            // 扁平摘要结构 → 简单列表
-            if (root.has("daily_calories") || root.has("daily_calorie_target")) {
-                writeKV(md, root); md.append("\n"); return;
+            // 热量标头
+            if (root.has("daily_calories_target"))
+                t.append("**每日热量目标**: ").append(root.get("daily_calories_target").asText()).append(" kcal  \n");
+            if (root.has("macro_distribution")) {
+                JsonNode m = root.get("macro_distribution");
+                t.append("**宏量营养素**: ");
+                if (m.has("protein_pct")) t.append("蛋白质 ").append(m.get("protein_pct").asText()).append("%  ");
+                if (m.has("carbs_pct")) t.append("碳水 ").append(m.get("carbs_pct").asText()).append("%  ");
+                if (m.has("fat_pct")) t.append("脂肪 ").append(m.get("fat_pct").asText()).append("%");
+                t.append("  \n");
             }
+            t.append("\n");
 
-            // day1-day7 周计划 → 表格
-            List<String> dayKeys = new ArrayList<>();
-            for (int i = 1; i <= 7; i++) if (root.has("day" + i)) dayKeys.add("day" + i);
-            if (!dayKeys.isEmpty()) {
-                md.append("| 日期 | 餐别 | 食物 | 热量 | 蛋白质 | 碳水 | 脂肪 |\n");
-                md.append("|:------|:------|:-----|:-----|:-------|:-----|:-----|\n");
-                for (String dk : dayKeys) {
-                    JsonNode day = root.get(dk);
-                    JsonNode meals = day.has("meals") ? day.get("meals") : null;
-                    if (meals != null && meals.isArray()) {
-                        boolean first = true;
-                        for (JsonNode meal : meals) {
-                            String mealName = meal.has("meal") ? CN.getOrDefault(meal.get("meal").asText(), meal.get("meal").asText()) : "";
-                            String foods = meal.has("foods") && meal.get("foods").isArray() ? arrJoin(meal.get("foods"), "、") : "";
-                            String cal = meal.has("calories") ? meal.get("calories").asText() : "--";
-                            String prot = meal.has("protein") ? meal.get("protein").asText() : "--";
-                            String carb = meal.has("carbs") ? meal.get("carbs").asText() : "--";
-                            String fat = meal.has("fat") ? meal.get("fat").asText() : "--";
-                            md.append("| ").append(first ? "**" + CN.getOrDefault(dk, dk) + "**（" + (day.has("total_calories") ? day.get("total_calories").asText() + "kcal" : "--") + "）" : "").append(" | ").append(mealName).append(" | ").append(foods).append(" | ").append(cal).append(" | ").append(prot).append(" | ").append(carb).append(" | ").append(fat).append(" |\n");
-                            first = false;
+            // 数组格式: [{day, breakfast/lunch/dinner/snack (direct)}, 或 {day, meals:[{meal,items}]}]
+            if (root.isArray()) {
+                // 检测是哪种数组格式
+                JsonNode first = root.get(0);
+                if (first.has("breakfast") || first.has("lunch") || first.has("dinner")) {
+                    // 直接字段格式: breakfast/lunch/dinner/snack 作为day对象的直接属性
+                    t.append("| 日期 | 早餐 | 午餐 | 晚餐 | 加餐 |\n");
+                    t.append("|:------|:-----|:-----|:-----|:-----|\n");
+                    for (JsonNode day : root) {
+                        t.append("| **").append(day.has("day")?day.get("day").asText():"--").append("** | ")
+                         .append(day.has("breakfast")?day.get("breakfast").asText():"--").append(" | ")
+                         .append(day.has("lunch")?day.get("lunch").asText():"--").append(" | ")
+                         .append(day.has("dinner")?day.get("dinner").asText():"--").append(" | ")
+                         .append(day.has("snack")?day.get("snack").asText():"--").append(" |\n");
+                    }
+                    return t.toString();
+                }
+                // meals格式: 兼容 meals数组 或 meals对象(键=餐名), 字段名 meal/type/name
+                t.append("| 日期 | 餐别 | 食物 |\n");
+                t.append("|:------|:------|:-----|\n");
+                for (JsonNode day : root) {
+                    String dayName = day.has("day") ? day.get("day").asText() : "";
+                    if (day.has("meals")) {
+                        JsonNode meals = day.get("meals");
+                        if (meals.isObject()) {
+                            // meals是对象: {"早餐":"...","午餐":"...","加餐":"...","晚餐":"..."}
+                            boolean firstObj = true;
+                            var fields = meals.fields();
+                            while (fields.hasNext()) {
+                                var entry = fields.next();
+                                t.append("| ").append(firstObj ? "**"+dayName+"**" : "").append(" | ")
+                                 .append(entry.getKey()).append(" | ").append(entry.getValue().asText()).append(" |\n");
+                                firstObj = false;
+                            }
+                        } else if (meals.isArray()) {
+                            // meals是数组: [{meal/type/name:"早餐", items/foods/content:"..."}]
+                            boolean firstMeal = true;
+                            for (JsonNode meal : meals) {
+                                String mealName = meal.has("meal") ? meal.get("meal").asText() :
+                                                meal.has("type") ? meal.get("type").asText() :
+                                                meal.has("name") ? meal.get("name").asText() : "--";
+                                String foods = "--";
+                                if (meal.has("items")) {
+                                    foods = meal.get("items").isArray() ? arrJoin(meal.get("items")) : meal.get("items").asText();
+                                } else if (meal.has("foods")) {
+                                    foods = meal.get("foods").isArray() ? arrJoin(meal.get("foods")) : meal.get("foods").asText();
+                                } else if (meal.has("content")) {
+                                    foods = meal.get("content").asText();
+                                }
+                                t.append("| ").append(firstMeal ? "**"+dayName+"**" : "").append(" | ")
+                                 .append(mealName).append(" | ").append(foods).append(" |\n");
+                                firstMeal = false;
+                            }
                         }
+                    } else {
+                        String foods = day.has("items") ? (day.get("items").isArray()?arrJoin(day.get("items")):day.get("items").asText()) : "--";
+                        t.append("| **").append(dayName).append("** | -- | ").append(foods).append(" |\n");
                     }
                 }
-                md.append("\n"); return;
+                return t.toString();
             }
 
-            // daily_meals 结构 → 表格
-            if (root.has("daily_meals") && root.get("daily_meals").isArray()) {
-                md.append("| 日期 | 餐别 | 食物 | 热量 | 蛋白质 | 碳水 | 脂肪 |\n");
-                md.append("|:------|:------|:-----|:-----|:-------|:-----|:-----|\n");
-                for (JsonNode day : root.get("daily_meals")) {
-                    String dayName = day.has("day") ? CN.getOrDefault(day.get("day").asText(), day.get("day").asText()) : "";
-                    JsonNode meals = day.has("meals") ? day.get("meals") : null;
-                    if (meals != null && meals.isArray()) {
-                        boolean first = true;
-                        for (JsonNode meal : meals) {
-                            String mn = meal.has("meal") ? CN.getOrDefault(meal.get("meal").asText(), meal.get("meal").asText()) : "";
-                            String foods = meal.has("foods") && meal.get("foods").isArray() ? arrJoin(meal.get("foods"), "、") : "";
-                            md.append("| ").append(first ? "**" + dayName + "**" : "").append(" | ").append(mn).append(" | ").append(foods).append(" | ").append(meal.has("calories") ? meal.get("calories").asText() : "--").append(" | ").append(meal.has("protein") ? meal.get("protein").asText() : "--").append(" | ").append(meal.has("carbs") ? meal.get("carbs").asText() : "--").append(" | ").append(meal.has("fat") ? meal.get("fat").asText() : "--").append(" |\n");
-                            first = false;
+            // days 格式 → 表格
+            if (root.has("days")) {
+                JsonNode days = root.get("days");
+                t.append("| 日期 | 早餐 | 午餐 | 晚餐 | 加餐 |\n");
+                t.append("|:------|:-----|:-----|:-----|:-----|\n");
+                for (int i = 0; i < 7; i++) {
+                    JsonNode day = days.get(WEEK_EN[i]);
+                    if (day == null) continue;
+                    t.append("| **").append(WEEK_CN[i]).append("** | ")
+                     .append(day.has("breakfast")?day.get("breakfast").asText():"--").append(" | ")
+                     .append(day.has("lunch")?day.get("lunch").asText():"--").append(" | ")
+                     .append(day.has("dinner")?day.get("dinner").asText():"--").append(" | ")
+                     .append(day.has("snacks")?day.get("snacks").asText():"--").append(" |\n");
+                }
+                return t.toString();
+            }
+
+            // day1-day7 格式
+            for (int i = 1; i <= 7; i++) {
+                if (root.has("day"+i)) {
+                    t.append("| 日期 | 餐别 | 食物 | 热量 | 蛋白质 | 碳水 | 脂肪 |\n");
+                    t.append("|:------|:------|:-----|:-----|:-------|:-----|:-----|\n");
+                    for (int j = 1; j <= 7; j++) {
+                        JsonNode day = root.get("day"+j);
+                        if (day == null) continue;
+                        JsonNode meals = day.has("meals") ? day.get("meals") : null;
+                        if (meals != null && meals.isArray()) {
+                            boolean first = true;
+                            for (JsonNode meal : meals) {
+                                String mn = meal.has("meal") ? meal.get("meal").asText() : "";
+                                String foods = meal.has("foods") && meal.get("foods").isArray() ? arrJoin(meal.get("foods")) : "";
+                                t.append("| ").append(first ? "**第"+j+"天**("+ (day.has("total_calories")?day.get("total_calories").asText()+"kcal":"") +")" : "").append(" | ").append(mn).append(" | ").append(foods).append(" | ").append(meal.has("calories")?meal.get("calories").asText():"--").append(" | ").append(meal.has("protein")?meal.get("protein").asText():"--").append(" | ").append(meal.has("carbs")?meal.get("carbs").asText():"--").append(" | ").append(meal.has("fat")?meal.get("fat").asText():"--").append(" |\n");
+                                first = false;
+                            }
                         }
                     }
+                    return t.toString();
                 }
-                md.append("\n"); return;
             }
 
-            // fallback: 列表
-            writeKV(md, root); md.append("\n");
-        } catch (Exception e) { md.append(jsonStr).append("\n\n"); }
+            return "*（暂无法解析饮食格式）*";
+        } catch (Exception e) { return "*（饮食数据解析失败）*"; }
     }
 
-    // ===== 渲染：运动 → 表格 =====
-    private static void renderWorkout(StringBuilder md, String jsonStr) {
-        if (jsonStr == null || jsonStr.isBlank()) { md.append("*（无数据）*\n\n"); return; }
+    // ===== 运动 → 完整表格 =====
+    private static String formatWorkoutTable(String jsonStr) {
+        if (jsonStr == null || jsonStr.isBlank()) return "*（暂无运动处方）*";
         try {
             JsonNode root = om.readTree(jsonStr);
-            JsonNode schedule = root.has("weekly_schedule") ? root.get("weekly_schedule") : root;
-            if (schedule.isArray()) {
-                md.append("| 日期 | 类型 | 训练内容 | 时长 | 强度 |\n");
-                md.append("|:------|:-----|:---------|:-----|:-----|\n");
-                for (JsonNode day : schedule) {
-                    String dayName = day.has("day") ? CN.getOrDefault(day.get("day").asText(), day.get("day").asText()) : "";
-                    String type = day.has("type") ? day.get("type").asText() : "";
-                    String exercises = day.has("exercises") && day.get("exercises").isArray() ? arrJoin(day.get("exercises"), "；") : day.has("notes") ? day.get("notes").asText() : "";
-                    String dur = day.has("duration_min") ? day.get("duration_min").asText() + "分钟" : day.has("duration") ? day.get("duration").asText() : "--";
-                    String intensity = day.has("intensity") ? day.get("intensity").asText() : "--";
-                    md.append("| **").append(dayName).append("** | ").append(type).append(" | ").append(exercises).append(" | ").append(dur).append(" | ").append(intensity).append(" |\n");
+            StringBuilder t = new StringBuilder();
+
+            if (root.has("weekly_overview"))
+                t.append("**本周概览**: ").append(root.get("weekly_overview").asText()).append("  \n\n");
+
+            // 数组格式: [{day, workout/activity/content/type, exercises/note}, ...]
+            if (root.isArray()) {
+                t.append("| 日期 | 类型 | 训练内容 |\n");
+                t.append("|:------|:-----|:---------|\n");
+                for (JsonNode day : root) {
+                    String dayName = day.has("day") ? day.get("day").asText() : "--";
+                    String type = day.has("type") ? day.get("type").asText() :
+                                 day.has("workout") ? "训练" : "--";
+                    String content = "--";
+                    if (day.has("exercises") && day.get("exercises").isArray()) {
+                        content = arrJoin(day.get("exercises"));
+                    } else if (day.has("workout")) {
+                        content = day.get("workout").asText();
+                    } else if (day.has("activity")) {
+                        content = day.get("activity").asText();
+                    } else if (day.has("content")) {
+                        content = day.get("content").asText();
+                    } else if (day.has("note")) {
+                        content = day.get("note").asText();
+                    }
+                    if (day.has("duration")) content += " (" + day.get("duration").asText() + ")";
+                    if (day.has("reps")) content += " · " + day.get("reps").asText();
+                    t.append("| **").append(dayName).append("** | ").append(type).append(" | ").append(content).append(" |\n");
                 }
-                md.append("\n"); return;
+                return t.toString();
             }
-            writeKV(md, root); md.append("\n");
-        } catch (Exception e) { md.append(jsonStr).append("\n\n"); }
+
+            // days 格式
+            if (root.has("days")) {
+                JsonNode days = root.get("days");
+                t.append("| 日期 | 类型 | 训练内容 |\n");
+                t.append("|:------|:-----|:---------|\n");
+                for (int i = 0; i < 7; i++) {
+                    JsonNode day = days.get(WEEK_EN[i]);
+                    if (day == null) continue;
+                    t.append("| **").append(WEEK_CN[i]).append("** | ")
+                     .append(day.has("type")?day.get("type").asText():"--").append(" | ")
+                     .append(day.has("content")?day.get("content").asText():"--").append(" |\n");
+                }
+                return t.toString();
+            }
+
+            // weekly_schedule 格式
+            if (root.has("weekly_schedule") && root.get("weekly_schedule").isArray()) {
+                t.append("| 日期 | 类型 | 训练内容 | 时长 | 强度 |\n");
+                t.append("|:------|:-----|:---------|:-----|:-----|\n");
+                for (JsonNode day : root.get("weekly_schedule")) {
+                    t.append("| **").append(day.has("day")?day.get("day").asText():"--").append("** | ")
+                     .append(day.has("type")?day.get("type").asText():"--").append(" | ")
+                     .append(day.has("exercises")&&day.get("exercises").isArray()?arrJoin(day.get("exercises")):day.has("notes")?day.get("notes").asText():"--").append(" | ")
+                     .append(day.has("duration_min")?day.get("duration_min").asText()+"分钟":"--").append(" | ")
+                     .append(day.has("intensity")?day.get("intensity").asText():"--").append(" |\n");
+                }
+                return t.toString();
+            }
+
+            return "*（暂无法解析运动格式）*";
+        } catch (Exception e) { return "*（运动数据解析失败）*"; }
     }
 
-    // ===== 工具 =====
-    private static String arrJoin(JsonNode arr, String sep) {
+    // ===== 摘要 =====
+    private static String dietSummary(String s) {
+        if (s == null) return "无";
+        try { JsonNode n = om.readTree(s); if (n.has("daily_calories_target")) return "**"+n.get("daily_calories_target").asText()+" kcal/天** · 7天详细"; if (n.has("day1")) return "7天详细计划"; return "已生成"; } catch (Exception e) { return "已生成"; }
+    }
+    private static String workoutSummary(String s) {
+        if (s == null) return "无";
+        try { JsonNode n = om.readTree(s); if (n.has("weekly_overview")) return n.get("weekly_overview").asText().substring(0, Math.min(60, n.get("weekly_overview").asText().length()))+"..."; if (n.has("weekly_schedule")) return n.get("weekly_schedule").size()+" 天训练"; return "已生成"; } catch (Exception e) { return "已生成"; }
+    }
+
+    private static String arrJoin(JsonNode arr) {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < arr.size(); i++) {
-            if (i > 0) sb.append(sep);
-            sb.append(arr.get(i).asText());
-        }
+        for (int i = 0; i < arr.size(); i++) { if (i > 0) sb.append("；"); sb.append(arr.get(i).asText()); }
         return sb.toString();
     }
-    private static void appendSnap(StringBuilder md, String s) {
-        if (s == null) { md.append("*无*\n"); return; }
-        try { JsonNode n = om.readTree(s); md.append(n.has("description") ? n.get("description").asText() : "已记录").append("  \n"); }
-        catch (Exception e) { md.append("已记录  \n"); }
-    }
-    private static void appendDietS(StringBuilder md, String s) {
-        if (s == null) { md.append("*无*\n"); return; }
-        try { JsonNode n = om.readTree(s); List<String> p = new ArrayList<>();
-            if (n.has("daily_calories")) p.add("**" + n.get("daily_calories").asText() + " kcal/天**");
-            if (n.has("day1")) p.add("七天详细计划"); if (n.has("daily_meals")) p.add(n.get("daily_meals").size() + "天计划");
-            if (p.isEmpty()) p.add("已生成"); md.append(String.join("，", p)).append("  \n"); }
-        catch (Exception e) { md.append("已生成  \n"); }
-    }
-    private static void appendSportS(StringBuilder md, String s) {
-        if (s == null) { md.append("*无*\n"); return; }
-        try { JsonNode n = om.readTree(s); JsonNode sc = n.has("weekly_schedule") ? n.get("weekly_schedule") : n;
-            md.append(sc.isArray() ? "共 **" + sc.size() + " 天**训练  \n" : "已生成  \n"); }
-        catch (Exception e) { md.append("已生成  \n"); }
-    }
-    private static String gCN(Integer g) { return g == null ? "未知" : g == 1 ? "男" : g == 2 ? "女" : "其他"; }
-    private static String aCN(String s) { return s == null ? "未知" : s.equalsIgnoreCase("LOW") ? "低活动量" : s.equalsIgnoreCase("MODERATE") ? "中等活动量" : s.equalsIgnoreCase("HIGH") ? "高活动量" : s; }
-    private static String dCN(String s) { return s == null ? "未知" : s.equalsIgnoreCase("KETO") ? "生酮饮食" : s.equalsIgnoreCase("VEGAN") ? "纯素饮食" : s.equalsIgnoreCase("BALANCED") ? "均衡饮食" : s; }
-    private static String gCN2(String s) { return s == null ? "未知" : s.equalsIgnoreCase("FAT_LOSS") ? "减重减脂" : s.equalsIgnoreCase("MUSCLE_GAIN") ? "增肌塑形" : s.equalsIgnoreCase("MAINTENANCE") ? "维持体重" : s; }
+    private static String labelAct(String s) { return s==null?"":s.equalsIgnoreCase("LOW")?"低活动量":s.equalsIgnoreCase("MODERATE")?"中等活动量":s.equalsIgnoreCase("HIGH")?"高活动量":s; }
+    private static String labelDiet(String s) { return s==null?"":s.equalsIgnoreCase("KETO")?"生酮饮食":s.equalsIgnoreCase("VEGAN")?"纯素饮食":s.equalsIgnoreCase("BALANCED")?"均衡饮食":s; }
+    private static String labelGoal(String s) { return s==null?"":s.equalsIgnoreCase("FAT_LOSS")?"减重减脂":s.equalsIgnoreCase("MUSCLE_GAIN")?"增肌塑形":s.equalsIgnoreCase("MAINTENANCE")?"维持体重":s; }
 }

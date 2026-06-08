@@ -27,7 +27,11 @@
     <template v-else>
       <header class="mb-10 flex justify-between items-end">
         <div><h2 class="text-3xl font-bold tracking-tight mb-2">健康档案</h2><p class="text-slate-500 dark:text-slate-400">您的核心生理指标、设置与历史诊断报告。</p></div>
-        <button @click="downloadExport" class="px-4 py-2.5 bg-slate-900 dark:bg-green-600 text-white rounded-xl text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-1.5 shadow-sm"><span class="text-base leading-none font-bold">↓</span> 下载健康报告</button>
+        <div class="flex gap-2">
+          <button v-if="!healthProfile" @click="showOnboarding=true" class="px-4 py-2.5 bg-green-500 text-white rounded-xl text-sm font-bold hover:bg-green-600 transition-opacity flex items-center gap-1.5 shadow-sm"><span>📝</span> 创建健康档案</button>
+          <button v-else-if="!weeklyReportReady" @click="generateWeeklyReport" :disabled="generatingWeek" class="px-4 py-2.5 bg-slate-900 dark:bg-green-600 text-white rounded-xl text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-1.5 shadow-sm disabled:opacity-50"><span class="text-base leading-none font-bold">📝</span> {{ generatingWeek ? '生成中...' : '生成本周健康报告' }}</button>
+          <button v-else @click="showWeeklyReport = true" class="px-4 py-2.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-xl text-sm font-medium border border-green-200 dark:border-green-800 flex items-center gap-1.5">📋 查看健康报告</button>
+        </div>
       </header>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -145,18 +149,43 @@
         </div>
       </div>
     </template>
+
+    <!-- Weekly Report Modal -->
+    <ReportTableView v-if="showWeeklyReport" :planId="latestPlanId" @close="showWeeklyReport=false" />
+
+    <!-- Progress Modal -->
+    <div v-if="generatingWeek" class="fixed inset-0 z-[70] flex items-center justify-center px-4 bg-slate-900/40 backdrop-blur-sm">
+      <div class="bg-surface-light dark:bg-surface-dark rounded-3xl p-8 shadow-2xl modal-enter border border-slate-100 dark:border-slate-800 w-full max-w-sm text-center">
+        <div class="w-12 h-12 mx-auto mb-4 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center"><span class="text-2xl animate-pulse">🔄</span></div>
+        <h3 class="font-bold mb-2">正在生成健康报告</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm mb-4">{{ progressSteps[progressStep] }}</p>
+        <div class="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div class="h-1.5 bg-green-500 rounded-full transition-all duration-1000" :style="{ width: ((progressStep+1)/progressSteps.length*100)+'%' }"></div></div>
+      </div>
+    </div>
+
+    <!-- Onboarding -->
+    <OnboardingModal v-if="showOnboarding" @done="showOnboarding=false; fetchHealthProfile()" />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import request from '@/api/request'
+import ReportTableView from '@/views/ReportTableView.vue'
+import OnboardingModal from '@/components/OnboardingModal.vue'
 
 const showReportsList = ref(false)
 const healthProfile = ref(null)
 const recentRecords = ref([])
 const allRecords = ref([])
 const selectedReport = ref(null)
+const showOnboarding = ref(false)
+const weeklyReportReady = ref(false)
+const generatingWeek = ref(false)
+const progressStep = ref(0)
+const progressSteps = ['正在分析体重趋势...', '正在生成饮食方案...', '正在规划运动处方...', '正在整理报告数据...']
+const showWeeklyReport = ref(false)
+const latestPlanId = ref(null)
 const profileEditCount = ref(3)
 const showEditModal = ref(false)
 const editForm = ref({ heightCm: null, age: null, gender: 1 })
@@ -174,8 +203,12 @@ const groupedRecords = computed(() => {
   return Object.keys(groups).sort((a, b) => b.localeCompare(a)).map(d => ({ date: d, reports: groups[d] }))
 })
 
-onMounted(async () => {
+async function fetchHealthProfile() {
   try { const r = await request.get('/profile'); healthProfile.value = r.data; dietTags.value = (r.data.dietPreference || '均衡饮食').split(',').filter(Boolean) } catch (e) { /* ignore */ }
+}
+
+onMounted(async () => {
+  await fetchHealthProfile()
   try { const r = await request.get('/records'); allRecords.value = r.data || []; recentRecords.value = allRecords.value.slice(0, 3) } catch (e) { /* ignore */ }
 })
 
@@ -251,6 +284,14 @@ const a = document.createElement('a'); a.href = url; a.download = `健康协议 
 }
 async function deletePlan(plan) {
   try { await request.delete(`/records/${plan.id}`); selectedReport.value = null; recentRecords.value = recentRecords.value.filter(r => r.id !== plan.id); allRecords.value = allRecords.value.filter(r => r.id !== plan.id) } catch (e) { /* ignore */ }
+}
+async function generateWeeklyReport() {
+  generatingWeek.value = true; progressStep.value = 0
+  const timer = setInterval(() => { if (progressStep.value < progressSteps.length - 1) progressStep.value++ }, 3000)
+  try {
+    const r = await request.post('/chat/message', { message: '生成本周健康计划，包含7天详细饮食和运动方案' })
+    if (r.data.planId) { latestPlanId.value = r.data.planId; weeklyReportReady.value = true }
+  } catch (e) { /* ignore */ } finally { clearInterval(timer); generatingWeek.value = false }
 }
 async function downloadExport() {
   try { const blob = await request.get('/profile/export', { responseType: 'blob' }); const url = URL.createObjectURL(new Blob([blob], { type: 'text/markdown' })); const a = document.createElement('a'); a.href = url; a.download = 'health-export.md'; a.click(); URL.revokeObjectURL(url) } catch (e) { /* ignore */ }

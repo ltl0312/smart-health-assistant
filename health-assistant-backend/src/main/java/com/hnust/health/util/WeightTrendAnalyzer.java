@@ -36,7 +36,8 @@ public class WeightTrendAnalyzer {
             return new TrendResult(null, null, BigDecimal.ZERO, BigDecimal.ZERO, 0, "暂无体重数据");
         }
 
-        // 按日期升序排列，确保第一条为最早记录
+        // 按日期升序排列（创建副本以避免修改原列表）
+        records = new java.util.ArrayList<>(records);
         records.sort((a, b) -> a.getRecordDate().compareTo(b.getRecordDate()));
 
         if (records.size() == 1) {

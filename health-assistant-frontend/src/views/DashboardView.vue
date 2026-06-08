@@ -19,13 +19,10 @@
           </div>
           <WeightSparkline :data="weightHistory" />
           <div class="mt-6 pt-6 border-t border-slate-50 dark:border-slate-800">
-            <div class="flex items-center justify-between mb-3">
-              <span class="text-xs text-slate-400 dark:text-slate-500 font-medium">今日修改: <span class="text-slate-700 dark:text-slate-300 font-bold">{{ todayUpdateCount }}/2</span></span>
-            </div>
             <div class="flex gap-3">
               <input v-model.number="weightInput" type="number" step="0.1" class="w-24 px-3 py-3 bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-slate-700 rounded-2xl text-center font-bold text-lg focus:ring-2 focus:ring-green-500 outline-none transition-all dark:text-white">
-              <button @click="recordWeight" :disabled="todayUpdateCount >= 2 || weightLoading" class="flex-1 py-3 bg-slate-900 dark:bg-green-600 text-white rounded-2xl font-medium transition-all duration-300 ease-apple hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
-                {{ weightLoading ? '...' : todayUpdateCount >= 2 ? '今日已达上限' : hasTodayRecord ? '修改今日体重' : '记录体重' }}
+              <button @click="recordWeight" :disabled="hasThisWeekRecord || weightLoading" class="flex-1 py-3 bg-slate-900 dark:bg-green-600 text-white rounded-2xl font-medium transition-all duration-300 ease-apple hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                {{ weightLoading ? '...' : hasThisWeekRecord ? '本周已记录' : '记录本周体重' }}
               </button>
             </div>
             <div v-if="weightMsg" class="mt-2 text-xs" :class="weightOk ? 'text-green-500' : 'text-red-400'">{{ weightMsg }}</div>
@@ -40,7 +37,7 @@
       </div>
 
       <div class="lg:col-span-7 fade-in" style="animation-delay: 0.2s;">
-        <AiProtocolCard ref="aiCardRef" @generate="generatePlan" />
+        <AiChatDialog />
       </div>
     </div>
   </div>
@@ -51,7 +48,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
 import request from '@/api/request'
 import WeightSparkline from '@/components/WeightSparkline.vue'
-import AiProtocolCard from '@/components/AiProtocolCard.vue'
+import AiChatDialog from '@/components/AiChatDialog.vue'
 
 const userStore = useUserStore()
 const userName = computed(() => userStore.userInfo?.nickname || userStore.userInfo?.username || '朋友')
@@ -60,9 +57,7 @@ const greetingWord = h < 6 ? '夜深了' : h < 12 ? '上午好' : h < 14 ? '中�
 const greetingMsg = computed(() => { if (h < 6) return '夜深了，注意休息。'; if (h < 12) return '来看看您今天的健康数据。'; if (h < 14) return '别忘了记录体重哦。'; if (h < 18) return '继续保持健康习惯。'; return '回顾今天的成果吧。' })
 
 const weightHistory = ref([])
-const todayRecord = computed(() => { const today = new Date().toISOString().slice(0, 10); return weightHistory.value.find(w => w.recordDate === today) })
-const hasTodayRecord = computed(() => !!todayRecord.value)
-const todayUpdateCount = computed(() => todayRecord.value?.updateCount ?? 0)
+const hasThisWeekRecord = computed(() => { const now = new Date(); const weekAgo = new Date(now.getTime() - 7*86400000).toISOString().slice(0,10); return weightHistory.value.some(w => w.recordDate >= weekAgo) })
 const latestWeight = computed(() => weightHistory.value.length ? weightHistory.value[weightHistory.value.length - 1].currentWeight : '--')
 const weightChange = computed(() => {
   if (weightHistory.value.length < 2) return 0
@@ -90,16 +85,11 @@ async function fetchWeightHistory() {
 }
 
 async function recordWeight() {
-  if (!weightInput.value) return
+  if (!weightInput.value || hasThisWeekRecord.value) return
   weightLoading.value = true; weightMsg.value = ''
-  const today = new Date().toISOString().slice(0, 10)
   try {
-    if (hasTodayRecord.value) {
-      await request.put('/weight/record', { recordDate: today, currentWeight: weightInput.value })
-    } else {
-      await request.post('/weight/record', { recordDate: today, currentWeight: weightInput.value })
-    }
-    weightMsg.value = '体重已同步'; weightOk.value = true
+    await request.post('/weight/record', { recordDate: new Date().toISOString().slice(0, 10), currentWeight: weightInput.value })
+    weightMsg.value = '本周体重已记录'; weightOk.value = true
     await fetchWeightHistory()
   } catch (e) { weightMsg.value = e.message; weightOk.value = false } finally { weightLoading.value = false }
 }

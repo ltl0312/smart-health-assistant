@@ -34,16 +34,9 @@
     <div class="space-y-6">
       <div class="sticky top-28 space-y-6">
         <div class="bg-surface-light dark:bg-surface-dark rounded-3xl p-8 shadow-premium dark:shadow-premium-dark border border-slate-50 dark:border-slate-800 transition-colors">
-          <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center gap-2"><span class="text-green-500 text-lg">💬</span><h3 class="font-bold">每日健康金句</h3></div>
-            <button @click="refreshQuote" :disabled="quoteRemaining <= 0 || quoteLoading" class="p-1.5 text-slate-400 hover:text-green-500 transition-colors disabled:opacity-30" title="换一句">⟳</button>
-          </div>
+          <div class="flex items-center gap-2 mb-4"><span class="text-green-500 text-lg">💬</span><h3 class="font-bold">每日健康金句</h3></div>
           <div v-if="quoteLoading" class="py-8 text-center"><div class="w-full h-4 rounded-full skeleton-shimmer mb-3"></div><div class="w-3/4 h-4 rounded-full skeleton-shimmer"></div></div>
-          <div v-else-if="quoteText" class="py-4">
-            <p class="text-lg font-serif italic text-slate-700 dark:text-slate-300 leading-relaxed">"{{ quoteText }}"</p>
-          </div>
-          <div v-else class="py-8 text-center text-slate-400 text-sm"><p>点击 ⟳ 获取今日金句</p></div>
-          <p class="text-xs text-slate-400 mt-3 text-right">今日剩余 {{ quoteRemaining }} 次</p>
+          <div v-else-if="quoteText" class="py-4"><p class="text-lg font-serif italic text-slate-700 dark:text-slate-300 leading-relaxed">"{{ quoteText }}"</p></div>
         </div>
       </div>
     </div>
@@ -82,9 +75,8 @@ const myUserId = userStore.userInfo?.userId
 const period = ref('weekly')
 const selectedUser = ref(null)
 
-// Health quotes
+// Health quotes - auto refresh on mount
 const quoteText = ref('')
-const quoteRemaining = ref(3)
 const quoteLoading = ref(false)
 
 async function fetchRank() {
@@ -92,15 +84,11 @@ async function fetchRank() {
 }
 function showUserDetail(item) { selectedUser.value = item }
 
-async function refreshQuote() {
+async function loadQuote() {
   quoteLoading.value = true
-  try {
-    const r = await request.get('/quote/health')
-    quoteText.value = r.data?.quote || ''
-    quoteRemaining.value = r.data?.remaining ?? 0
-  } catch (e) { /* ignore */ } finally { quoteLoading.value = false }
+  try { const r = await request.get('/quote/health'); quoteText.value = r.data?.quote || '' } catch (e) { /* ignore */ } finally { quoteLoading.value = false }
 }
 
-onMounted(() => { fetchRank(); refreshQuote() })
+onMounted(() => { fetchRank(); loadQuote() })
 watch(period, fetchRank)
 </script>

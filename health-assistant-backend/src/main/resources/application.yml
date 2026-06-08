@@ -57,7 +57,7 @@ llm:
     base-url: https://api.deepseek.com
     api-key: ${DEEPSEEK_API_KEY:sk-d2c2374ea93e4f7d8d55a3624a33839d}
     # 严格指定 V4 Pro 版本
-    model: deepseek-v4-flash
-    timeout-ms: 60000
+    model: deepseek-v4-pro
+    timeout-ms: 120000
     temperature: 0.2
     max-tokens: 4096
