@@ -16,7 +16,7 @@ public class RankController {
     private final RankService rankService;
 
     @GetMapping("/health")
-    public Result<List<HealthRankResponse>> getHealthRanking() {
-        return Result.ok(rankService.getHealthRanking());
+    public Result<List<HealthRankResponse>> getHealthRanking(@RequestParam(defaultValue = "weekly") String period) {
+        return Result.ok(rankService.getHealthRanking(period));
     }
 }

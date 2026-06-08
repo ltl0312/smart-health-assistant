@@ -13,5 +13,6 @@ public class HealthRankResponse {
     private String avatarUrl;
     private int score;
     private BigDecimal bmi;
+    private BigDecimal weightChange;
     private int consecutiveWeeks;
 }

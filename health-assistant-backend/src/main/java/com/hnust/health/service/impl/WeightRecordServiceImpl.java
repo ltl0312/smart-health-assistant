@@ -79,7 +79,7 @@ public class WeightRecordServiceImpl implements WeightRecordService {
         if (days <= 0) days = 30;
         List<WeightRecord> records = weightRecordMapper.selectByUserIdAndDays(userId, days);
         return records.stream()
-                .map(r -> new WeightHistoryResponse(r.getRecordDate(), r.getCurrentWeight(), r.getCalculatedBmi()))
+                .map(r -> new WeightHistoryResponse(r.getRecordDate(), r.getCurrentWeight(), r.getCalculatedBmi(), r.getUpdateCount()))
                 .collect(Collectors.toList());
     }
 }

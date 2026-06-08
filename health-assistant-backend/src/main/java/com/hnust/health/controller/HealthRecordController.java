@@ -52,11 +52,13 @@ public class HealthRecordController {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.parseMediaType("text/markdown;charset=UTF-8"));
-        String timeStr = plan.getCreatedAt() != null
-                ? plan.getCreatedAt().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd-HH:mm"))
-                : plan.getCycleStartDate().toString();
+        String datePart = plan.getCycleStartDate().toString();
+        String timePart = plan.getCreatedAt() != null
+                ? plan.getCreatedAt().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+                : "00:00";
+        String fname = "健康协议 · " + datePart + "——" + timePart + ".md";
         headers.setContentDisposition(ContentDisposition.attachment()
-                .filename("health-plan-" + timeStr + ".md", StandardCharsets.UTF_8)
+                .filename(fname, StandardCharsets.UTF_8)
                 .build());
 
         return new ResponseEntity<>(bytes, headers, HttpStatus.OK);

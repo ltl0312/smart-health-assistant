@@ -1,41 +1,25 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: 'class',
-  content: [
-    "./index.html",
-    "./src/**/*.{vue,js,ts,jsx,tsx}",
-  ],
+  content: ["./index.html", "./src/**/*.{vue,js,ts,jsx,tsx}"],
   theme: {
     extend: {
-      colors: {
-        // All colors use CSS variables for theme switching
-        canvas: 'var(--color-canvas)',
-        'surface-1': 'var(--color-surface-1)',
-        'surface-2': 'var(--color-surface-2)',
-        'surface-3': 'var(--color-surface-3)',
-        'surface-4': 'var(--color-surface-4)',
-        hairline: 'var(--color-hairline)',
-        'hairline-strong': 'var(--color-hairline-strong)',
-        ink: 'var(--color-ink)',
-        'ink-muted': 'var(--color-ink-muted)',
-        'ink-subtle': 'var(--color-ink-subtle)',
-        'ink-tertiary': 'var(--color-ink-tertiary)',
-        primary: 'var(--color-primary)',
-        'primary-hover': 'var(--color-primary-hover)',
-        'primary-focus': 'var(--color-primary-focus)',
-        success: 'var(--color-success)',
-        'inverse-canvas': 'var(--color-inverse-canvas)',
-        'inverse-ink': 'var(--color-inverse-ink)',
-      },
       fontFamily: {
-        sans: ['Inter', 'SF Pro Display', '-apple-system', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'sans-serif'],
+        serif: ['Georgia', 'serif'],
       },
-      borderRadius: {
-        'xs': '4px', 'sm': '6px', 'md': '8px',
-        'lg': '12px', 'xl': '16px', 'xxl': '24px', 'pill': '9999px',
+      colors: {
+        background: { light: '#FBFBFD', dark: '#0a0a0a' },
+        surface: { light: '#FFFFFF', dark: '#171717' },
+        medal: { gold: '#fef08a', silver: '#e2e8f0', bronze: '#ffedd5' },
       },
-      spacing: { 'section': '96px' },
-      letterSpacing: { 'tighter': '-0.05em', 'tight': '-0.02em' },
+      boxShadow: {
+        'premium': '0 4px 24px -4px rgba(0, 0, 0, 0.05)',
+        'premium-dark': '0 4px 24px -4px rgba(0, 0, 0, 0.4)',
+        'premium-hover': '0 12px 32px -4px rgba(0, 0, 0, 0.08)',
+      },
+      borderRadius: { '2xl': '1.25rem', '3xl': '1.75rem', '4xl': '2rem' },
+      transitionTimingFunction: { 'apple': 'cubic-bezier(0.25, 0.1, 0.25, 1)' },
     },
   },
   plugins: [],
