@@ -1,0 +1,99 @@
+# ============================================================
+# 智能健康助手 - Docker 编排配置 v2
+# ============================================================
+
+services:
+  # ---- MySQL 8.x 数据库 ----
+  mysql:
+    image: mysql:8.0
+    container_name: smart-health-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: a82711045
+      MYSQL_DATABASE: smart_health_db
+      MYSQL_CHARSET: utf8mb4
+      MYSQL_COLLATION: utf8mb4_unicode_ci
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./health-assistant-backend/src/main/resources/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - app-network
+
+  # ---- Redis 7.x 缓存 ----
+  redis:
+    image: redis:7-alpine
+    container_name: smart-health-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - app-network
+
+  # ---- Spring Boot 后端 ----
+  backend:
+    build:
+      context: ./health-assistant-backend
+      dockerfile: Dockerfile
+    container_name: smart-health-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/smart_health_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: a82711045
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-sk-d2c2374ea93e4f7d8d55a3624a33839d}
+    volumes:
+      # 头像上传目录持久化
+      - uploads-data:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  # ---- Vue3 前端 (Nginx) ----
+  frontend:
+    build:
+      context: ./health-assistant-frontend
+      dockerfile: Dockerfile
+    container_name: smart-health-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+volumes:
+  mysql-data:
+    driver: local
+  redis-data:
+    driver: local
+  uploads-data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge

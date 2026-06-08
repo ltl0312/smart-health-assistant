@@ -1,0 +1,49 @@
+# ========================
+# IDE & Editor
+# ========================
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ========================
+# Java / Maven
+# ========================
+target/
+*.class
+*.jar
+*.war
+!.mvn/wrapper/maven-wrapper.jar
+logs/
+*.log
+
+# ========================
+# Node / Frontend
+# ========================
+node_modules/
+dist/
+.npm
+*.log
+npm-debug.log*
+
+# ========================
+# Docker
+# ========================
+docker-compose.override.yml
+uploads/
+
+# ========================
+# Environment & Secrets
+# ========================
+.env
+.env.local
+*.env.local
+
+# ========================
+# OS
+# ========================
+Thumbs.db
+Desktop.ini

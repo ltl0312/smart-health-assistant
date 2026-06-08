@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   Dark mode (Linear) - default when html has class "dark"
+   ============================================================ */
+html.dark {
+  --color-canvas: #010102;
+  --color-surface-1: #0f1011;
+  --color-surface-2: #141516;
+  --color-surface-3: #18191a;
+  --color-surface-4: #191a1b;
+  --color-hairline: #23252a;
+  --color-hairline-strong: #34343a;
+  --color-ink: #f7f8f8;
+  --color-ink-muted: #d0d6e0;
+  --color-ink-subtle: #8a8f98;
+  --color-ink-tertiary: #62666d;
+  --color-primary: #5e6ad2;
+  --color-primary-hover: #828fff;
+  --color-primary-focus: #5e69d1;
+  --color-success: #27a644;
+  --color-inverse-canvas: #ffffff;
+  --color-inverse-ink: #000000;
+  color-scheme: dark;
+}
+
+/* ============================================================
+   Light mode - default when html has NO class "dark"
+   ============================================================ */
+:root {
+  --color-canvas: #f5f6f6;
+  --color-surface-1: #ffffff;
+  --color-surface-2: #f6f7f7;
+  --color-surface-3: #f0f1f2;
+  --color-surface-4: #ebedee;
+  --color-hairline: #e0e2e5;
+  --color-hairline-strong: #cfd1d5;
+  --color-ink: #11181c;
+  --color-ink-muted: #4a5568;
+  --color-ink-subtle: #6b7280;
+  --color-ink-tertiary: #9ca3af;
+  --color-primary: #5e6ad2;
+  --color-primary-hover: #4f5bc0;
+  --color-primary-focus: #5e69d1;
+  --color-success: #27a644;
+  --color-inverse-canvas: #010102;
+  --color-inverse-ink: #f7f8f8;
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: 'Inter', 'SF Pro Display', -apple-system, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+* { box-shadow: none !important; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--color-canvas); }
+::-webkit-scrollbar-thumb { background: var(--color-hairline-strong); border-radius: 3px; }
+
+/* Smooth transitions for theme-aware elements */
+.bg-canvas, .bg-surface-1, .bg-surface-2, .bg-surface-3, .bg-surface-4,
+.text-ink, .text-ink-muted, .text-ink-subtle, .text-ink-tertiary,
+.border-hairline, .border-hairline-strong {
+  transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+}
