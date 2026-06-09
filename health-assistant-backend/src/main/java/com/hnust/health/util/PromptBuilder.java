@@ -59,6 +59,21 @@ public class PromptBuilder {
         return sb.toString();
     }
 
+    /**
+     * 构建包含打卡记录的系统提示词（用于 AI 周报生成）
+     */
+    public static String buildSystemPrompt(HealthProfile profile, TrendResult trend, String checkinSummary) {
+        StringBuilder sb = new StringBuilder(buildSystemPrompt(profile, trend));
+        sb.append("\n## 本周打卡记录\n");
+        if (checkinSummary != null && !checkinSummary.isBlank()) {
+            sb.append(checkinSummary).append("\n");
+        } else {
+            sb.append("用户本周暂无打卡记录。\n");
+        }
+        sb.append("\n请结合打卡记录中的饮食和运动习惯，在本周计划中给出更有针对性的建议。\n");
+        return sb.toString();
+    }
+
     public static String buildUserMessage() {
         return "请为我生成本周的个性化饮食和运动计划。只输出JSON。";
     }

@@ -15,4 +15,10 @@ public class HealthRankResponse {
     private BigDecimal bmi;
     private BigDecimal weightChange;
     private int consecutiveWeeks;
+    // 分数分解
+    private int baseScore;
+    private int weekBonus;
+    private int bmiPenalty;
+    private int goalBonus;
+    private int checkinBonus;
 }

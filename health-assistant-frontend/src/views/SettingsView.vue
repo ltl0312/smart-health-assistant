@@ -96,7 +96,13 @@ async function saveInfo() {
 async function uploadAvatar(e) {
   const file = e.target.files[0]; if (!file) return
   const fd = new FormData(); fd.append('file', file)
-  try { const r = await request.post('/user/avatar', fd, { headers: { 'Content-Type': 'multipart/form-data' } }); avatarPreview.value = r.data + '?t=' + Date.now() } catch (e) { /* ignore */ }
+  try {
+    const r = await request.post('/user/avatar', fd) // 不要手动设 Content-Type，让 axios 自动加 boundary
+    avatarPreview.value = r.data + '?t=' + Date.now()
+    // 同步更新 userStore，让导航栏头像也刷新
+    userStore.userInfo = { ...userStore.userInfo, avatarUrl: r.data }
+    localStorage.setItem('userInfo', JSON.stringify(userStore.userInfo))
+  } catch (e) { console.error('头像上传失败:', e); alert('头像上传失败：' + (e.message || '文件过大或格式不支持')) }
 }
 async function changePw() {
   if (pw.new1 !== pw.new2) { pwMsg.value = '两次密码不一致'; pwOk.value = false; return }

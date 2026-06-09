@@ -50,7 +50,7 @@ public class UserProfileServiceImpl implements UserProfileService {
             throw new BusinessException(400, "仅支持图片文件");
 
         try {
-            Path uploadDir = Paths.get("./uploads/avatars/");
+            Path uploadDir = Paths.get("/app/uploads/avatars/");
             Files.createDirectories(uploadDir);
             String ext = ".png";
             if (contentType.contains("jpeg") || contentType.contains("jpg")) ext = ".jpg";

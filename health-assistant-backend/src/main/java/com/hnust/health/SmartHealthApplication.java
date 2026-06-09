@@ -6,7 +6,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
 @MapperScan("com.hnust.health.mapper")
-public class SmartHealthApplication {
+public class
+SmartHealthApplication {
     public static void main(String[] args) {
         SpringApplication.run(SmartHealthApplication.class, args);
     }

@@ -13,6 +13,7 @@ RUN mvn clean package -Dmaven.test.skip=true -B
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 RUN addgroup -g 1000 appgroup && adduser -u 1000 -G appgroup -D appuser
+RUN mkdir -p /app/uploads && chown appuser:appgroup /app/uploads
 COPY --from=builder /app/target/*.jar app.jar
 USER appuser
 EXPOSE 8080

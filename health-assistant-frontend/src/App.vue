@@ -41,9 +41,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
+import request from '@/api/request'
 import DashboardView from '@/views/DashboardView.vue'
+import CheckinView from '@/views/CheckinView.vue'
 import ProfileView from '@/views/ProfileView.vue'
 import RankView from '@/views/RankView.vue'
 import SettingsView from '@/views/SettingsView.vue'
@@ -53,10 +55,10 @@ const userStore = useUserStore()
 const isLoggedIn = computed(() => userStore.isLoggedIn)
 const activeView = ref(localStorage.getItem('activeView') || 'dashboard')
 const showOnboarding = ref(false)
-const viewMap = { dashboard: DashboardView, profile: ProfileView, rank: RankView, settings: SettingsView }
+const viewMap = { dashboard: DashboardView, checkin: CheckinView, profile: ProfileView, rank: RankView, settings: SettingsView }
 const currentView = computed(() => viewMap[activeView.value])
-const tabs = [{ id: 'dashboard', label: '今日看板' },{ id: 'profile', label: '健康档案' },{ id: 'rank', label: '排行榜' }]
-const avatarUrl = computed(() => userStore.userInfo?.avatarUrl)
+const tabs = [{ id: 'dashboard', label: '今日看板' },{ id: 'checkin', label: '每日打卡' },{ id: 'profile', label: '健康档案' },{ id: 'rank', label: '排行榜' }]
+const avatarUrl = ref('')
 const initial = computed(() => (userStore.userInfo?.nickname || userStore.userInfo?.username || '?')[0].toUpperCase())
 
 // Login
@@ -65,15 +67,35 @@ const loginForm = reactive({ username: '', password: '', email: '' })
 const loginLoading = ref(false)
 const loginError = ref('')
 
+async function loadAvatar() {
+  try {
+    const r = await request.get('/user/profile')
+    const a = r.data?.avatarUrl
+    if (a) {
+      avatarUrl.value = a
+      userStore.userInfo = { ...userStore.userInfo, avatarUrl: a }
+      localStorage.setItem('userInfo', JSON.stringify(userStore.userInfo))
+    }
+  } catch (e) { /* ignore */ }
+}
+
 async function handleLogin() {
   loginError.value = ''; loginLoading.value = true
   try {
     if (isRegister.value) { await userStore.register(loginForm.username, loginForm.password, loginForm.email); await userStore.login(loginForm.username, loginForm.password); showOnboarding.value = true }
     else { const r = await userStore.login(loginForm.username, loginForm.password); if (!r.hasProfile) showOnboarding.value = true }
-    document.documentElement.classList.add('dark')
+    await loadAvatar()
+    // 跟随用户上次保存的主题偏好，没有记录则默认深色
+    const savedDark = localStorage.getItem('darkMode')
+    if (savedDark === null || savedDark === 'true') {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
   } catch (e) { loginError.value = e.message || '操作失败' } finally { loginLoading.value = false }
 }
 
+onMounted(() => { if (isLoggedIn.value) loadAvatar() })
 watch(activeView, v => localStorage.setItem('activeView', v))
 function switchTo(view) { if (activeView.value !== view) activeView.value = view }
 function handleLogout() { userStore.logout(); localStorage.removeItem('activeView') }

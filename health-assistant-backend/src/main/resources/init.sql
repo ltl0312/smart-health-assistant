@@ -83,3 +83,27 @@ CREATE TABLE IF NOT EXISTS `ai_plan` (
   KEY `idx_user_cycle` (`user_id`, `cycle_start_date` DESC),
   CONSTRAINT `fk_plan_user_id` FOREIGN KEY (`user_id`) REFERENCES `sys_user` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI干预计划表';
+
+-- -----------------------------------------------------------
+-- 5. 每日打卡记录表 (1:N 关联 sys_user)
+-- -----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `daily_checkin` (
+  `id`              BIGINT       NOT NULL AUTO_INCREMENT COMMENT '打卡流水号',
+  `user_id`         BIGINT       NOT NULL                COMMENT '所属用户ID',
+  `record_date`     DATE         NOT NULL                COMMENT '打卡归属日期',
+  `checkin_type`    VARCHAR(16)  NOT NULL                COMMENT '类型: MEAL/DRINK/EXERCISE/WATER',
+  `meal_type`       VARCHAR(16)  DEFAULT NULL            COMMENT '餐次: BREAKFAST/LUNCH/DINNER/SNACK',
+  `food_desc`       VARCHAR(255) DEFAULT NULL            COMMENT '食物描述',
+  `food_amount`     VARCHAR(64)  DEFAULT NULL            COMMENT '份量说明',
+  `drink_name`      VARCHAR(64)  DEFAULT NULL            COMMENT '饮品名称',
+  `drink_volume_ml` INT          DEFAULT NULL            COMMENT '饮用量(毫升)',
+  `exercise_type`   VARCHAR(64)  DEFAULT NULL            COMMENT '运动类型',
+  `duration_min`    INT          DEFAULT NULL            COMMENT '运动时长(分钟)',
+  `water_cups`      INT          DEFAULT NULL            COMMENT '杯数(每杯250ml)',
+  `health_score`    INT          NOT NULL DEFAULT 0      COMMENT '饮食健康评分(-2~2)，不吃=-1',
+  `created_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_user_date` (`user_id`, `record_date` DESC),
+  KEY `idx_user_type_date` (`user_id`, `checkin_type`, `record_date` DESC),
+  CONSTRAINT `fk_checkin_user` FOREIGN KEY (`user_id`) REFERENCES `sys_user` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='每日打卡记录表';
