@@ -99,15 +99,29 @@ public class MarkdownGenerator {
             JsonNode root = om.readTree(jsonStr);
             StringBuilder t = new StringBuilder();
 
-            // 热量标头
+            // 热量标头 — 兼容 daily_calories_target 和 daily_calories
             if (root.has("daily_calories_target"))
                 t.append("**每日热量目标**: ").append(root.get("daily_calories_target").asText()).append(" kcal  \n");
-            if (root.has("macro_distribution")) {
-                JsonNode m = root.get("macro_distribution");
+            else if (root.has("daily_calories"))
+                t.append("**每日热量目标**: ").append(root.get("daily_calories").asText()).append(" kcal  \n");
+
+            // 宏量营养素 — 兼容 macro_distribution(百分比) 和 macros(克数)
+            JsonNode macroNode = root.has("macro_distribution") ? root.get("macro_distribution")
+                    : root.has("macros") ? root.get("macros") : null;
+            if (macroNode != null) {
                 t.append("**宏量营养素**: ");
-                if (m.has("protein_pct")) t.append("蛋白质 ").append(m.get("protein_pct").asText()).append("%  ");
-                if (m.has("carbs_pct")) t.append("碳水 ").append(m.get("carbs_pct").asText()).append("%  ");
-                if (m.has("fat_pct")) t.append("脂肪 ").append(m.get("fat_pct").asText()).append("%");
+                if (macroNode.has("protein_pct") || macroNode.has("protein_g")) {
+                    String p = macroNode.has("protein_pct") ? macroNode.get("protein_pct").asText() + "%" : macroNode.get("protein_g").asText() + "g";
+                    t.append("蛋白质 ").append(p).append("  ");
+                }
+                if (macroNode.has("carbs_pct") || macroNode.has("carbs_g")) {
+                    String c = macroNode.has("carbs_pct") ? macroNode.get("carbs_pct").asText() + "%" : macroNode.get("carbs_g").asText() + "g";
+                    t.append("碳水 ").append(c).append("  ");
+                }
+                if (macroNode.has("fat_pct") || macroNode.has("fat_g")) {
+                    String f = macroNode.has("fat_pct") ? macroNode.get("fat_pct").asText() + "%" : macroNode.get("fat_g").asText() + "g";
+                    t.append("脂肪 ").append(f);
+                }
                 t.append("  \n");
             }
             t.append("\n");
@@ -191,26 +205,48 @@ public class MarkdownGenerator {
                 return t.toString();
             }
 
-            // day1-day7 格式
+            // day1-day7 格式（两种子格式：meals数组 或 直接 breakfast/lunch/dinner 字段）
             for (int i = 1; i <= 7; i++) {
                 if (root.has("day"+i)) {
-                    t.append("| 日期 | 餐别 | 食物 | 热量 | 蛋白质 | 碳水 | 脂肪 |\n");
-                    t.append("|:------|:------|:-----|:-----|:-------|:-----|:-----|\n");
-                    for (int j = 1; j <= 7; j++) {
-                        JsonNode day = root.get("day"+j);
-                        if (day == null) continue;
-                        JsonNode meals = day.has("meals") ? day.get("meals") : null;
-                        if (meals != null && meals.isArray()) {
-                            boolean first = true;
-                            for (JsonNode meal : meals) {
-                                String mn = meal.has("meal") ? meal.get("meal").asText() : "";
-                                String foods = meal.has("foods") && meal.get("foods").isArray() ? arrJoin(meal.get("foods")) : "";
-                                t.append("| ").append(first ? "**第"+j+"天**("+ (day.has("total_calories")?day.get("total_calories").asText()+"kcal":"") +")" : "").append(" | ").append(mn).append(" | ").append(foods).append(" | ").append(meal.has("calories")?meal.get("calories").asText():"--").append(" | ").append(meal.has("protein")?meal.get("protein").asText():"--").append(" | ").append(meal.has("carbs")?meal.get("carbs").asText():"--").append(" | ").append(meal.has("fat")?meal.get("fat").asText():"--").append(" |\n");
-                                first = false;
+                    JsonNode firstDay = root.get("day"+i);
+
+                    // 子格式A：day对象直接包含 breakfast/lunch/dinner/snack 字符串字段
+                    if (firstDay.has("breakfast") || firstDay.has("lunch") || firstDay.has("dinner")) {
+                        t.append("| 日期 | 早餐 | 午餐 | 晚餐 | 加餐 |\n");
+                        t.append("|:------|:-----|:-----|:-----|:-----|\n");
+                        for (int j = 1; j <= 7; j++) {
+                            JsonNode day = root.get("day"+j);
+                            if (day == null) continue;
+                            t.append("| **").append("第").append(j).append("天").append("** | ")
+                             .append(day.has("breakfast") ? day.get("breakfast").asText() : "--").append(" | ")
+                             .append(day.has("lunch") ? day.get("lunch").asText() : "--").append(" | ")
+                             .append(day.has("dinner") ? day.get("dinner").asText() : "--").append(" | ")
+                             .append(day.has("snack") ? day.get("snack").asText() : day.has("snacks") ? day.get("snacks").asText() : "--").append(" |\n");
+                        }
+                        return t.toString();
+                    }
+
+                    // 子格式B：day对象包含 meals 数组 [{meal, foods, calories, protein, carbs, fat}]
+                    JsonNode meals = firstDay.has("meals") ? firstDay.get("meals") : null;
+                    if (meals != null && meals.isArray()) {
+                        t.append("| 日期 | 餐别 | 食物 | 热量 | 蛋白质 | 碳水 | 脂肪 |\n");
+                        t.append("|:------|:------|:-----|:-----|:-------|:-----|:-----|\n");
+                        for (int j = 1; j <= 7; j++) {
+                            JsonNode day = root.get("day"+j);
+                            if (day == null) continue;
+                            JsonNode dayMeals = day.has("meals") ? day.get("meals") : null;
+                            if (dayMeals != null && dayMeals.isArray()) {
+                                boolean first = true;
+                                for (JsonNode meal : dayMeals) {
+                                    String mn = meal.has("meal") ? meal.get("meal").asText() : "";
+                                    String foods = meal.has("foods") && meal.get("foods").isArray() ? arrJoin(meal.get("foods")) : "";
+                                    t.append("| ").append(first ? "**第"+j+"天**("+ (day.has("total_calories")?day.get("total_calories").asText()+"kcal":"") +")" : "").append(" | ").append(mn).append(" | ").append(foods).append(" | ").append(meal.has("calories")?meal.get("calories").asText():"--").append(" | ").append(meal.has("protein")?meal.get("protein").asText():"--").append(" | ").append(meal.has("carbs")?meal.get("carbs").asText():"--").append(" | ").append(meal.has("fat")?meal.get("fat").asText():"--").append(" |\n");
+                                    first = false;
+                                }
                             }
                         }
+                        return t.toString();
                     }
-                    return t.toString();
                 }
             }
 
@@ -282,6 +318,20 @@ public class MarkdownGenerator {
                      .append(day.has("intensity")?day.get("intensity").asText():"--").append(" |\n");
                 }
                 return t.toString();
+            }
+
+            // day1-day7 格式（每天一个纯文本字符串）
+            for (int i = 1; i <= 7; i++) {
+                if (root.has("day"+i) && root.get("day"+i).isTextual()) {
+                    t.append("| 日期 | 训练内容 |\n");
+                    t.append("|:------|:---------|\n");
+                    for (int j = 1; j <= 7; j++) {
+                        JsonNode day = root.get("day"+j);
+                        if (day == null || !day.isTextual()) continue;
+                        t.append("| **第").append(j).append("天** | ").append(day.asText()).append(" |\n");
+                    }
+                    return t.toString();
+                }
             }
 
             return "*（暂无法解析运动格式）*";

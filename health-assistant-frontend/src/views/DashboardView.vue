@@ -19,10 +19,17 @@
           </div>
           <WeightSparkline :data="weightHistory" />
           <div class="mt-6 pt-6 border-t border-slate-50 dark:border-slate-800">
+            <div class="flex items-center gap-2 mb-3">
+              <label class="text-xs text-slate-400">补录周次</label>
+              <select v-model="selectedWeekDate" @change="onWeekChange" class="px-3 py-1.5 bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none dark:text-white">
+                <option value="">选择补录周次</option>
+                <option v-for="w in availableWeeks" :key="w.value" :value="w.value">{{ w.label }}</option>
+              </select>
+            </div>
             <div class="flex gap-3">
-              <input v-model.number="weightInput" type="number" step="0.1" class="w-24 px-3 py-3 bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-slate-700 rounded-2xl text-center font-bold text-lg focus:ring-2 focus:ring-green-500 outline-none transition-all dark:text-white">
-              <button @click="recordWeight" :disabled="hasThisWeekRecord || weightLoading" class="flex-1 py-3 bg-slate-900 dark:bg-green-600 text-white rounded-2xl font-medium transition-all duration-300 ease-apple hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
-                {{ weightLoading ? '...' : hasThisWeekRecord ? '本周已记录' : '记录本周体重' }}
+              <input v-model.number="weightInput" type="number" step="0.1" :disabled="!canRecord" class="w-24 px-3 py-3 bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-slate-700 rounded-2xl text-center font-bold text-lg focus:ring-2 focus:ring-green-500 outline-none transition-all dark:text-white disabled:opacity-50">
+              <button @click="recordWeight" :disabled="!canRecord || weightLoading" class="flex-1 py-3 bg-slate-900 dark:bg-green-600 text-white rounded-2xl font-medium transition-all duration-300 ease-apple hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                {{ weightLoading ? '...' : buttonText }}
               </button>
             </div>
             <div v-if="weightMsg" class="mt-2 text-xs" :class="weightOk ? 'text-green-500' : 'text-red-400'">{{ weightMsg }}</div>
@@ -44,7 +51,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onActivated } from 'vue'
 import { useUserStore } from '@/stores/user'
 import request from '@/api/request'
 import WeightSparkline from '@/components/WeightSparkline.vue'
@@ -58,6 +65,55 @@ const greetingMsg = computed(() => { if (h < 6) return '夜深了，注意休息
 
 const weightHistory = ref([])
 const hasThisWeekRecord = computed(() => { const now = new Date(); const weekAgo = new Date(now.getTime() - 7*86400000).toISOString().slice(0,10); return weightHistory.value.some(w => w.recordDate >= weekAgo) })
+
+// 可补录的前两周（上周、前周），本周不走补录
+const availableWeeks = computed(() => {
+  const weeks = []
+  const today = new Date()
+  today.setHours(0,0,0,0)
+  for (let i = 1; i <= 2; i++) {
+    const d = new Date(today.getTime() - i * 7 * 86400000)
+    const ds = d.toISOString().slice(0, 10)
+    const hasRecord = weightHistory.value.some(w => w.recordDate === ds)
+    const label = `${ds} (${getWeekLabel(i)})${hasRecord ? ' ✓' : ''}`
+    weeks.push({ value: ds, label, hasRecord })
+  }
+  return weeks
+})
+const selectedWeekDate = ref('')
+const isBackfillMode = computed(() => selectedWeekDate.value !== '')
+
+function getWeekLabel(i) {
+  if (i === 1) return '上周'
+  return '前周'
+}
+
+const selectedWeekHasRecord = ref(false)
+function onWeekChange() {
+  if (!selectedWeekDate.value) {
+    selectedWeekHasRecord.value = false
+    weightInput.value = weightHistory.value.length ? parseFloat(weightHistory.value[weightHistory.value.length - 1].currentWeight) : null
+    return
+  }
+  const found = weightHistory.value.find(w => w.recordDate === selectedWeekDate.value)
+  selectedWeekHasRecord.value = !!found
+  if (found) weightInput.value = parseFloat(found.currentWeight)
+  else weightInput.value = null
+}
+
+const buttonText = computed(() => {
+  if (isBackfillMode.value) {
+    return selectedWeekHasRecord.value ? '该周已记录' : '补录体重'
+  }
+  return hasThisWeekRecord.value ? '本周体重已记录' : '记录本周体重'
+})
+
+const canRecord = computed(() => {
+  if (isBackfillMode.value) {
+    return !selectedWeekHasRecord.value
+  }
+  return !hasThisWeekRecord.value
+})
 const latestWeight = computed(() => weightHistory.value.length ? weightHistory.value[weightHistory.value.length - 1].currentWeight : '--')
 const weightChange = computed(() => {
   if (weightHistory.value.length < 2) return 0
@@ -75,21 +131,26 @@ const weightOk = ref(true)
 const aiCardRef = ref(null)
 
 onMounted(async () => { await fetchWeightHistory() })
+onActivated(async () => { await fetchWeightHistory() })
 
 async function fetchWeightHistory() {
   try {
     const res = await request.get('/weight/history', { params: { days: 30 } })
     weightHistory.value = res.data || []
     if (weightHistory.value.length) weightInput.value = parseFloat(weightHistory.value[weightHistory.value.length - 1].currentWeight)
+    selectedWeekDate.value = ''
+    selectedWeekHasRecord.value = false
   } catch (e) { console.error(e) }
 }
 
 async function recordWeight() {
-  if (!weightInput.value || hasThisWeekRecord.value) return
+  if (!weightInput.value || !canRecord.value) return
   weightLoading.value = true; weightMsg.value = ''
   try {
-    await request.post('/weight/record', { recordDate: new Date().toISOString().slice(0, 10), currentWeight: weightInput.value })
-    weightMsg.value = '本周体重已记录'; weightOk.value = true
+    const recordDate = isBackfillMode.value ? selectedWeekDate.value : new Date().toISOString().slice(0, 10)
+    await request.post('/weight/record', { recordDate, currentWeight: weightInput.value })
+    weightMsg.value = '体重已记录'; weightOk.value = true
+    if (isBackfillMode.value) selectedWeekHasRecord.value = true
     await fetchWeightHistory()
   } catch (e) { weightMsg.value = e.message; weightOk.value = false } finally { weightLoading.value = false }
 }

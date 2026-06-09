@@ -37,6 +37,12 @@ request.interceptors.response.use(
     return res
   },
   error => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('userInfo')
+      window.location.href = '/login'
+      return Promise.reject(error)
+    }
     console.error('网络请求错误:', error.message)
     return Promise.reject(error)
   }

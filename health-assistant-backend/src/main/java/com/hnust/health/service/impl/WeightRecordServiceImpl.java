@@ -42,7 +42,7 @@ public class WeightRecordServiceImpl implements WeightRecordService {
         try {
             weightRecordMapper.insert(record);
         } catch (Exception e) {
-            throw new BusinessException(400, "该日期已有体重记录，可使用编辑功能修改");
+            throw new BusinessException(400, "该日期体重记录已存在");
         }
     }
 

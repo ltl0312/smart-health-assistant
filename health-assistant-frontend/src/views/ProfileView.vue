@@ -6,19 +6,25 @@
         <button @click="showReportsList = false" class="w-10 h-10 flex items-center justify-center rounded-full bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors border border-slate-100 dark:border-slate-700"><span class="text-xl font-bold">←</span></button>
         <div><h2 class="text-3xl font-bold tracking-tight mb-1">历史健康报告</h2><p class="text-sm text-slate-500 dark:text-slate-400">按日期与时间归档的全部 AI 健康建议。</p></div>
       </header>
-      <div class="max-w-3xl space-y-8 pb-10">
-        <div v-for="group in groupedRecords" :key="group.date" class="mb-8">
-          <div class="flex items-center gap-3 mb-4"><div class="h-px bg-slate-200 dark:bg-slate-700 flex-grow"></div><span class="text-xs font-bold text-slate-400 uppercase tracking-widest">{{ group.date }}</span><div class="h-px bg-slate-200 dark:bg-slate-700 flex-grow"></div></div>
-          <div class="space-y-3">
-            <div v-for="r in group.reports" :key="r.id" @click="openReport(r)"
-              class="p-5 rounded-2xl bg-surface-light dark:bg-surface-dark border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-green-200 dark:hover:border-green-800 transition-all cursor-pointer group">
-              <div class="flex justify-between items-start mb-2">
-                <h4 class="font-bold text-lg group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">健康协议 · {{ fmtReportTitle(r) }}</h4>
-                <span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs font-medium text-slate-500">{{ fmtTimeOnly(r.createdAt) }}</span>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div class="lg:col-span-2 space-y-8 pb-10">
+          <div v-for="group in groupedRecords" :key="group.date" class="mb-8">
+            <div class="flex items-center gap-3 mb-4"><div class="h-px bg-slate-200 dark:bg-slate-700 flex-grow"></div><span class="text-xs font-bold text-slate-400 uppercase tracking-widest">{{ group.date }}</span><div class="h-px bg-slate-200 dark:bg-slate-700 flex-grow"></div></div>
+            <div class="space-y-3">
+              <div v-for="r in group.reports" :key="r.id" @click="openReport(r)"
+                class="p-5 rounded-2xl bg-surface-light dark:bg-surface-dark border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-green-200 dark:hover:border-green-800 transition-all cursor-pointer group">
+                <div class="flex justify-between items-start mb-2">
+                  <h4 class="font-bold text-lg group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">健康协议 · {{ fmtReportTitle(r) }}</h4>
+                  <span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs font-medium text-slate-500">{{ fmtTimeOnly(r.createdAt) }}</span>
+                </div>
+                <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">{{ getBrief(r.llmReasoningChain) }}</p>
               </div>
-              <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">{{ getBrief(r.llmReasoningChain) }}</p>
             </div>
           </div>
+        </div>
+        <!-- Right: Key Metrics -->
+        <div class="space-y-6">
+          <KeyMetrics :weightHistory="weightHistory" :bmiValue="latestBmi" />
         </div>
       </div>
     </template>
@@ -169,10 +175,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onActivated } from 'vue'
 import request from '@/api/request'
 import ReportTableView from '@/views/ReportTableView.vue'
 import OnboardingModal from '@/components/OnboardingModal.vue'
+import KeyMetrics from '@/components/KeyMetrics.vue'
 
 const showReportsList = ref(false)
 const healthProfile = ref(null)
@@ -186,6 +193,8 @@ const progressStep = ref(0)
 const progressSteps = ['正在分析体重趋势...', '正在生成饮食方案...', '正在规划运动处方...', '正在整理报告数据...']
 const showWeeklyReport = ref(false)
 const latestPlanId = ref(null)
+const weightHistory = ref([])
+const latestBmi = ref(null)
 const profileEditCount = ref(3)
 const showEditModal = ref(false)
 const editForm = ref({ heightCm: null, age: null, gender: 1 })
@@ -207,10 +216,21 @@ async function fetchHealthProfile() {
   try { const r = await request.get('/profile'); healthProfile.value = r.data; dietTags.value = (r.data.dietPreference || '均衡饮食').split(',').filter(Boolean) } catch (e) { /* ignore */ }
 }
 
-onMounted(async () => {
+async function loadProfileData() {
   await fetchHealthProfile()
-  try { const r = await request.get('/records'); allRecords.value = r.data || []; recentRecords.value = allRecords.value.slice(0, 3) } catch (e) { /* ignore */ }
-})
+  try {
+    const [recRes, wtRes] = await Promise.all([
+      request.get('/records'),
+      request.get('/weight/history', { params: { days: 30 } })
+    ])
+    allRecords.value = recRes.data || []; recentRecords.value = allRecords.value.slice(0, 3)
+    const wh = wtRes.data || []; weightHistory.value = wh
+    if (wh.length) latestBmi.value = wh[wh.length - 1].calculatedBmi
+  } catch (e) { /* ignore */ }
+}
+
+onMounted(loadProfileData)
+onActivated(loadProfileData)
 
 function fetchRecords() { /* already loaded */ }
 

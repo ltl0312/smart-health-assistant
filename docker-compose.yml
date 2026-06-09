@@ -60,7 +60,6 @@ services:
       SPRING_DATASOURCE_PASSWORD: a82711045
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
     volumes:
       # 头像上传目录持久化
       - uploads-data:/app/uploads

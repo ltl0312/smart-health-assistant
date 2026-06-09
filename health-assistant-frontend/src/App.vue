@@ -26,18 +26,15 @@
       <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <div class="flex items-center gap-2 font-bold tracking-tight text-lg"><span class="text-green-500 text-xl">✦</span> SmartHealth</div>
         <div class="hidden md:flex items-center gap-8 h-full relative">
-          <button v-for="tab in tabs" :key="tab.id" @click="activeView = tab.id" class="relative h-full flex items-center text-sm transition-colors" :class="activeView === tab.id ? 'text-green-500 font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-green-500'">{{ tab.label }}</button>
+          <button v-for="tab in tabs" :key="tab.id" @click="switchTo(tab.id)" class="relative h-full flex items-center text-sm transition-colors" :class="activeView === tab.id ? 'text-green-500 font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-green-500'">{{ tab.label }}</button>
         </div>
-        <button @click="activeView = 'settings'" class="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 font-medium hover:ring-2 hover:ring-green-500/50 transition-all overflow-hidden">
+        <button @click="switchTo('settings')" class="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 font-medium hover:ring-2 hover:ring-green-500/50 transition-all overflow-hidden">
           <img v-if="avatarUrl" :src="avatarUrl" class="w-full h-full rounded-full object-cover" /><span v-else>{{ initial }}</span>
         </button>
       </div>
     </nav>
     <main class="pt-28 max-w-7xl mx-auto px-6">
-      <DashboardView v-if="activeView === 'dashboard'" :key="'dash'+refreshKey" />
-      <ProfileView v-if="activeView === 'profile'" :key="'prof'+refreshKey" />
-      <RankView v-if="activeView === 'rank'" :key="'rank'+refreshKey" />
-      <SettingsView v-if="activeView === 'settings'" @logout="handleLogout" @refresh="refreshKey++" />
+      <component :is="currentView" @logout="handleLogout" />
     </main>
     <OnboardingModal v-if="showOnboarding" @done="showOnboarding=false" />
   </div>
@@ -55,8 +52,9 @@ import OnboardingModal from '@/components/OnboardingModal.vue'
 const userStore = useUserStore()
 const isLoggedIn = computed(() => userStore.isLoggedIn)
 const activeView = ref(localStorage.getItem('activeView') || 'dashboard')
-const refreshKey = ref(0)
 const showOnboarding = ref(false)
+const viewMap = { dashboard: DashboardView, profile: ProfileView, rank: RankView, settings: SettingsView }
+const currentView = computed(() => viewMap[activeView.value])
 const tabs = [{ id: 'dashboard', label: '今日看板' },{ id: 'profile', label: '健康档案' },{ id: 'rank', label: '排行榜' }]
 const avatarUrl = computed(() => userStore.userInfo?.avatarUrl)
 const initial = computed(() => (userStore.userInfo?.nickname || userStore.userInfo?.username || '?')[0].toUpperCase())
@@ -77,5 +75,6 @@ async function handleLogin() {
 }
 
 watch(activeView, v => localStorage.setItem('activeView', v))
+function switchTo(view) { if (activeView.value !== view) activeView.value = view }
 function handleLogout() { userStore.logout(); localStorage.removeItem('activeView') }
 </script>
