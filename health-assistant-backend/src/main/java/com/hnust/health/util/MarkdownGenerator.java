@@ -3,9 +3,11 @@ package com.hnust.health.util;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hnust.health.model.AiPlan;
+import com.hnust.health.model.DailyCheckin;
 import com.hnust.health.model.HealthProfile;
 import com.hnust.health.model.WeightRecord;
 
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
@@ -17,6 +19,10 @@ public class MarkdownGenerator {
 
     // ===== 单份报告 =====
     public static String generatePlanReport(AiPlan plan) {
+        return generatePlanReport(plan, null);
+    }
+
+    public static String generatePlanReport(AiPlan plan, List<DailyCheckin> checkins) {
         StringBuilder md = new StringBuilder();
         String time = plan.getCreatedAt() != null
                 ? plan.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) : "未知";
@@ -35,6 +41,12 @@ public class MarkdownGenerator {
         // 运动表格
         md.append("## 🏃 运动处方\n\n");
         md.append(formatWorkoutTable(plan.getWorkoutPlanJson())).append("\n\n");
+
+        // 每日打卡摘要
+        if (checkins != null && !checkins.isEmpty()) {
+            md.append("## ✅ 本周打卡记录\n\n");
+            md.append(formatCheckinSummary(checkins, plan.getCycleStartDate())).append("\n\n");
+        }
 
         // AI推理
         if (plan.getLlmReasoningChain() != null && !plan.getLlmReasoningChain().isBlank()) {
@@ -81,6 +93,73 @@ public class MarkdownGenerator {
         }
         md.append("\n*📝 导出时间：").append(java.time.LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))).append("*\n");
         return md.toString();
+    }
+
+    // ===== 打卡摘要 → 表格 =====
+    private static String formatCheckinSummary(List<DailyCheckin> checkins, LocalDate cycleStart) {
+        if (checkins == null || checkins.isEmpty()) return "*（暂无打卡记录）*";
+        LocalDate cycleEnd = cycleStart.plusDays(6);
+
+        // 按日期分组
+        Map<LocalDate, List<DailyCheckin>> byDate = new LinkedHashMap<>();
+        for (DailyCheckin c : checkins) {
+            LocalDate d = c.getRecordDate();
+            if (!d.isBefore(cycleStart) && !d.isAfter(cycleEnd)) {
+                byDate.computeIfAbsent(d, k -> new ArrayList<>()).add(c);
+            }
+        }
+        if (byDate.isEmpty()) return "*（本周暂无打卡记录）*";
+
+        StringBuilder t = new StringBuilder();
+        t.append("| 日期 | 饮食 | 运动 | 饮水 | 健康分 |\n");
+        t.append("|:------|:-----|:-----|:-----|:------|\n");
+
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("MM/dd");
+        String[] weekLabels = {"周一","周二","周三","周四","周五","周六","周日"};
+
+        for (int i = 0; i < 7; i++) {
+            LocalDate d = cycleStart.plusDays(i);
+            List<DailyCheckin> dayList = byDate.getOrDefault(d, Collections.emptyList());
+
+            Set<String> meals = new LinkedHashSet<>();
+            List<String> exercises = new ArrayList<>();
+            int waterCups = 0;
+            int totalHealthScore = 0;
+
+            for (DailyCheckin c : dayList) {
+                switch (c.getCheckinType()) {
+                    case "MEAL" -> {
+                        String label = translateMealName(c.getMealType());
+                        String desc = c.getFoodDesc() != null ? c.getFoodDesc() : "";
+                        if (desc.length() > 12) desc = desc.substring(0, 12) + "…";
+                        String scoreStr = "";
+                        if (c.getHealthScore() != null && c.getHealthScore() != 0) {
+                            scoreStr = (c.getHealthScore() > 0 ? "+" : "") + c.getHealthScore();
+                        }
+                        meals.add(label + (desc.isEmpty() ? "" : " " + desc) + (scoreStr.isEmpty() ? "" : "(" + scoreStr + ")"));
+                        totalHealthScore += c.getHealthScore() != null ? c.getHealthScore() : 0;
+                    }
+                    case "EXERCISE" -> {
+                        String ex = c.getExerciseType() != null ? c.getExerciseType() : "运动";
+                        ex += c.getDurationMin() != null ? " " + c.getDurationMin() + "min" : "";
+                        exercises.add(ex);
+                    }
+                    case "WATER" -> waterCups += c.getWaterCups() != null ? c.getWaterCups() : 0;
+                }
+            }
+
+            String mealStr = meals.isEmpty() ? "--" : String.join("<br>", meals);
+            String exStr = exercises.isEmpty() ? "--" : String.join("<br>", exercises);
+            String waterStr = waterCups > 0 ? waterCups + "杯" : "--";
+            String scoreStr = dayList.isEmpty() ? "--" : (totalHealthScore > 0 ? "+" : "") + totalHealthScore;
+
+            t.append("| **").append(weekLabels[i]).append("** | ")
+             .append(mealStr).append(" | ")
+             .append(exStr).append(" | ")
+             .append(waterStr).append(" | ")
+             .append(scoreStr).append(" |\n");
+        }
+        return t.toString();
     }
 
     // ===== 趋势快照 → 文本 =====
@@ -151,22 +230,28 @@ public class MarkdownGenerator {
                     if (day.has("meals")) {
                         JsonNode meals = day.get("meals");
                         if (meals.isObject()) {
-                            // meals是对象: {"早餐":"...","午餐":"...","加餐":"...","晚餐":"..."}
-                            boolean firstObj = true;
+                            // meals是对象: 收集→翻译→排序→渲染
+                            List<String[]> mealEntries = new ArrayList<>();
                             var fields = meals.fields();
                             while (fields.hasNext()) {
                                 var entry = fields.next();
+                                mealEntries.add(new String[]{translateMealName(entry.getKey()), entry.getValue().asText()});
+                            }
+                            mealEntries.sort((a, b) -> Integer.compare(mealOrder(a[0]), mealOrder(b[0])));
+                            boolean firstObj = true;
+                            for (String[] me : mealEntries) {
                                 t.append("| ").append(firstObj ? "**"+dayName+"**" : "").append(" | ")
-                                 .append(entry.getKey()).append(" | ").append(entry.getValue().asText()).append(" |\n");
+                                 .append(me[0]).append(" | ").append(me[1]).append(" |\n");
                                 firstObj = false;
                             }
                         } else if (meals.isArray()) {
-                            // meals是数组: [{meal/type/name:"早餐", items/foods/content:"..."}]
-                            boolean firstMeal = true;
+                            // meals是数组: 收集→排序→翻译→渲染
+                            List<String[]> sorted = new ArrayList<>();
                             for (JsonNode meal : meals) {
-                                String mealName = meal.has("meal") ? meal.get("meal").asText() :
+                                String rawName = meal.has("meal") ? meal.get("meal").asText() :
                                                 meal.has("type") ? meal.get("type").asText() :
-                                                meal.has("name") ? meal.get("name").asText() : "--";
+                                                meal.has("name") ? meal.get("name").asText() :
+                                                meal.has("time") ? meal.get("time").asText() : "--";
                                 String foods = "--";
                                 if (meal.has("items")) {
                                     foods = meal.get("items").isArray() ? arrJoin(meal.get("items")) : meal.get("items").asText();
@@ -175,8 +260,13 @@ public class MarkdownGenerator {
                                 } else if (meal.has("content")) {
                                     foods = meal.get("content").asText();
                                 }
+                                sorted.add(new String[]{translateMealName(rawName), foods});
+                            }
+                            sorted.sort((a, b) -> Integer.compare(mealOrder(a[0]), mealOrder(b[0])));
+                            boolean firstMeal = true;
+                            for (String[] entry : sorted) {
                                 t.append("| ").append(firstMeal ? "**"+dayName+"**" : "").append(" | ")
-                                 .append(mealName).append(" | ").append(foods).append(" |\n");
+                                 .append(entry[0]).append(" | ").append(entry[1]).append(" |\n");
                                 firstMeal = false;
                             }
                         }
@@ -184,6 +274,24 @@ public class MarkdownGenerator {
                         String foods = day.has("items") ? (day.get("items").isArray()?arrJoin(day.get("items")):day.get("items").asText()) : "--";
                         t.append("| **").append(dayName).append("** | -- | ").append(foods).append(" |\n");
                     }
+                }
+                return t.toString();
+            }
+
+            // 星期键名格式: {"monday":{breakfast/lunch/dinner/snack}, "tuesday":...}
+            if (root.has("monday") || root.has("Monday")) {
+                String[] weekKeys = {"monday","tuesday","wednesday","thursday","friday","saturday","sunday"};
+                t.append("| 日期 | 早餐 | 午餐 | 晚餐 | 加餐 |\n");
+                t.append("|:------|:-----|:-----|:-----|:-----|\n");
+                for (int i = 0; i < 7; i++) {
+                    JsonNode day = root.get(weekKeys[i]);
+                    if (day == null) day = root.get(weekKeys[i].substring(0,1).toUpperCase() + weekKeys[i].substring(1));
+                    if (day == null) continue;
+                    t.append("| **").append(WEEK_CN[i]).append("** | ")
+                     .append(day.has("breakfast") ? translateMealName(day.get("breakfast").asText().length() > 30 ? day.get("breakfast").asText().substring(0,30)+"…" : day.get("breakfast").asText()) : "--").append(" | ")
+                     .append(day.has("lunch") ? day.get("lunch").asText() : "--").append(" | ")
+                     .append(day.has("dinner") ? day.get("dinner").asText() : "--").append(" | ")
+                     .append(day.has("snack") ? day.get("snack").asText() : "--").append(" |\n");
                 }
                 return t.toString();
             }
@@ -271,10 +379,12 @@ public class MarkdownGenerator {
                 for (JsonNode day : root) {
                     String dayName = day.has("day") ? day.get("day").asText() : "--";
                     String type = day.has("type") ? day.get("type").asText() :
-                                 day.has("workout") ? "训练" : "--";
+                                 day.has("workout") || day.has("activity") || day.has("activities") ? "运动" : "--";
                     String content = "--";
                     if (day.has("exercises") && day.get("exercises").isArray()) {
                         content = arrJoin(day.get("exercises"));
+                    } else if (day.has("activities")) {
+                        content = day.get("activities").isArray() ? arrJoin(day.get("activities")) : day.get("activities").asText();
                     } else if (day.has("workout")) {
                         content = day.get("workout").asText();
                     } else if (day.has("activity")) {
@@ -287,6 +397,20 @@ public class MarkdownGenerator {
                     if (day.has("duration")) content += " (" + day.get("duration").asText() + ")";
                     if (day.has("reps")) content += " · " + day.get("reps").asText();
                     t.append("| **").append(dayName).append("** | ").append(type).append(" | ").append(content).append(" |\n");
+                }
+                return t.toString();
+            }
+
+            // 星期键名格式: {"monday":"快走30分钟...", "tuesday":"..."}
+            if (root.has("monday") || root.has("Monday")) {
+                String[] weekKeys = {"monday","tuesday","wednesday","thursday","friday","saturday","sunday"};
+                t.append("| 日期 | 训练内容 |\n");
+                t.append("|:------|:---------|\n");
+                for (int i = 0; i < 7; i++) {
+                    JsonNode day = root.get(weekKeys[i]);
+                    if (day == null) day = root.get(weekKeys[i].substring(0,1).toUpperCase() + weekKeys[i].substring(1));
+                    String content = day != null ? (day.isTextual() ? day.asText() : day.toString()) : "--";
+                    t.append("| **").append(WEEK_CN[i]).append("** | ").append(content).append(" |\n");
                 }
                 return t.toString();
             }
@@ -346,6 +470,26 @@ public class MarkdownGenerator {
     private static String workoutSummary(String s) {
         if (s == null) return "无";
         try { JsonNode n = om.readTree(s); if (n.has("weekly_overview")) return n.get("weekly_overview").asText().substring(0, Math.min(60, n.get("weekly_overview").asText().length()))+"..."; if (n.has("weekly_schedule")) return n.get("weekly_schedule").size()+" 天训练"; return "已生成"; } catch (Exception e) { return "已生成"; }
+    }
+
+    /** 翻译餐次名称为中文，并按早餐→午餐→晚餐→加餐的顺序给出排序权重 */
+    private static int mealOrder(String name) {
+        if (name == null) return 99;
+        String n = name.toLowerCase();
+        if (n.contains("breakfast") || n.contains("早餐") || n.contains("早")) return 1;
+        if (n.contains("lunch") || n.contains("午餐") || n.contains("午")) return 2;
+        if (n.contains("dinner") || n.contains("晚餐") || n.contains("晚")) return 3;
+        if (n.contains("snack") || n.contains("加餐") || n.contains("小食")) return 4;
+        return 99;
+    }
+    private static String translateMealName(String name) {
+        if (name == null) return "--";
+        String n = name.toLowerCase();
+        if (n.contains("breakfast") || n.contains("早餐") || n.contains("早")) return "早餐";
+        if (n.contains("lunch") || n.contains("午餐") || n.contains("午")) return "午餐";
+        if (n.contains("dinner") || n.contains("晚餐") || n.contains("晚")) return "晚餐";
+        if (n.contains("snack") || n.contains("加餐") || n.contains("小食")) return "加餐";
+        return name; // keep original if can't translate
     }
 
     private static String arrJoin(JsonNode arr) {

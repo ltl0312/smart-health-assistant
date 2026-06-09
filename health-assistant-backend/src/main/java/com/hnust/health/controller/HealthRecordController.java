@@ -2,7 +2,9 @@ package com.hnust.health.controller;
 
 import com.hnust.health.config.Result;
 import com.hnust.health.mapper.AiPlanMapper;
+import com.hnust.health.mapper.DailyCheckinMapper;
 import com.hnust.health.model.AiPlan;
+import com.hnust.health.model.DailyCheckin;
 import com.hnust.health.util.MarkdownGenerator;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +12,7 @@ import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -21,6 +24,7 @@ import static com.hnust.health.constant.Constants.REQUEST_ATTR_USER_ID;
 public class HealthRecordController {
 
     private final AiPlanMapper aiPlanMapper;
+    private final DailyCheckinMapper dailyCheckinMapper;
 
     @GetMapping
     public Result<List<AiPlan>> listRecords(@RequestAttribute(REQUEST_ATTR_USER_ID) Long userId) {
@@ -47,7 +51,12 @@ public class HealthRecordController {
             return ResponseEntity.notFound().build();
         }
 
-        String markdown = MarkdownGenerator.generatePlanReport(plan);
+        // 查询该计划周期内的打卡记录
+        LocalDate cycleStart = plan.getCycleStartDate();
+        LocalDate cycleEnd = cycleStart.plusDays(6);
+        List<DailyCheckin> checkins = dailyCheckinMapper.selectByUserIdAndDateRange(userId, cycleStart, cycleEnd);
+
+        String markdown = MarkdownGenerator.generatePlanReport(plan, checkins);
         byte[] bytes = markdown.getBytes(StandardCharsets.UTF_8);
 
         HttpHeaders headers = new HttpHeaders();
