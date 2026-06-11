@@ -5,18 +5,18 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
-        serif: ['Georgia', 'serif'],
+        sans: ['"Noto Sans SC"', '"Microsoft YaHei"', 'system-ui', 'sans-serif'],
+        serif: ['"Noto Serif SC"', 'Georgia', 'serif'],
       },
       colors: {
-        background: { light: '#FBFBFD', dark: '#0a0a0a' },
-        surface: { light: '#FFFFFF', dark: '#171717' },
+        background: { light: '#F6FAF8', dark: '#07110d' },
+        surface: { light: '#FFFFFF', dark: '#111a16' },
         medal: { gold: '#fef08a', silver: '#e2e8f0', bronze: '#ffedd5' },
       },
       boxShadow: {
-        'premium': '0 4px 24px -4px rgba(0, 0, 0, 0.05)',
-        'premium-dark': '0 4px 24px -4px rgba(0, 0, 0, 0.4)',
-        'premium-hover': '0 12px 32px -4px rgba(0, 0, 0, 0.08)',
+        'premium': '0 18px 50px -30px rgba(15, 118, 110, 0.35)',
+        'premium-dark': '0 18px 50px -30px rgba(20, 184, 166, 0.35)',
+        'premium-hover': '0 22px 60px -32px rgba(15, 118, 110, 0.42)',
       },
       borderRadius: { '2xl': '1.25rem', '3xl': '1.75rem', '4xl': '2rem' },
       transitionTimingFunction: { 'apple': 'cubic-bezier(0.25, 0.1, 0.25, 1)' },

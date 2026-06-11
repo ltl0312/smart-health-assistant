@@ -1,22 +1,66 @@
 <template>
   <!-- Login Gate -->
-  <div v-if="!isLoggedIn" class="min-h-screen bg-background-light dark:bg-background-dark flex items-center justify-center px-4 transition-colors">
-    <div class="w-full max-w-sm">
-      <div class="text-center mb-8">
-        <span class="text-green-500 text-4xl">✦</span>
-        <h1 class="text-2xl font-bold mt-3">SmartHealth</h1>
-        <p class="text-slate-500 dark:text-slate-400 text-sm mt-1">{{ isRegister ? '创建账户开始健康之旅' : '登录查看您的健康数据' }}</p>
-      </div>
-      <div class="bg-surface-light dark:bg-surface-dark rounded-3xl p-8 shadow-premium dark:shadow-premium-dark border border-slate-50 dark:border-slate-800">
-        <form @submit.prevent="handleLogin" class="space-y-4">
-          <div><label class="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">用户名</label><input v-model="loginForm.username" required class="w-full px-4 py-3 bg-slate-50 dark:bg-background-dark border border-transparent dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-green-500 outline-none font-medium dark:text-white transition-colors"></div>
-          <div v-if="isRegister"><label class="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">邮箱</label><input v-model="loginForm.email" type="email" class="w-full px-4 py-3 bg-slate-50 dark:bg-background-dark border border-transparent dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-green-500 outline-none font-medium dark:text-white transition-colors"></div>
-          <div><label class="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">密码</label><input v-model="loginForm.password" type="password" required class="w-full px-4 py-3 bg-slate-50 dark:bg-background-dark border border-transparent dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-green-500 outline-none font-medium dark:text-white transition-colors"></div>
-          <div v-if="loginError" class="text-red-400 text-xs">{{ loginError }}</div>
-          <button type="submit" :disabled="loginLoading" class="w-full py-3 bg-slate-900 dark:bg-green-600 text-white rounded-xl font-medium hover:opacity-90 transition-opacity disabled:opacity-50">{{ loginLoading ? '...' : isRegister ? '注册' : '登录' }}</button>
-        </form>
-        <div class="mt-4 text-center"><button @click="isRegister=!isRegister;loginError=''" class="text-sm text-slate-400 hover:text-green-500 transition-colors">{{ isRegister ? '已有账户？登录' : '没有账户？注册' }}</button></div>
-      </div>
+  <div v-if="!isLoggedIn" class="min-h-screen bg-background-light dark:bg-background-dark px-4 py-8 transition-colors">
+    <div class="mx-auto grid min-h-[calc(100vh-4rem)] w-full max-w-6xl grid-cols-1 items-center gap-8 lg:grid-cols-[1.08fr_0.92fr]">
+      <section class="hidden lg:block">
+        <div class="rounded-[2rem] border border-slate-200 bg-white/80 p-8 shadow-premium dark:border-slate-800 dark:bg-slate-900/80">
+          <div class="flex items-center gap-3">
+            <span class="flex h-11 w-11 items-center justify-center rounded-2xl bg-green-500 text-xl font-bold text-white">S</span>
+            <div>
+              <p class="text-sm font-semibold text-green-600 dark:text-green-400">SmartHealth</p>
+              <h1 class="text-3xl font-bold tracking-tight">把健康记录变成可执行计划</h1>
+            </div>
+          </div>
+          <div class="mt-10 grid grid-cols-2 gap-4">
+            <div class="rounded-2xl bg-slate-50 p-5 dark:bg-slate-950">
+              <p class="text-xs text-slate-400">今日状态</p>
+              <p class="mt-2 text-2xl font-bold">打卡 · 饮水 · 运动</p>
+            </div>
+            <div class="rounded-2xl bg-green-50 p-5 dark:bg-green-900/20">
+              <p class="text-xs text-green-700 dark:text-green-300">AI 周计划</p>
+              <p class="mt-2 text-2xl font-bold">先审核后应用</p>
+            </div>
+            <div class="rounded-2xl bg-slate-50 p-5 dark:bg-slate-950">
+              <p class="text-xs text-slate-400">趋势报告</p>
+              <p class="mt-2 text-2xl font-bold">按周回顾</p>
+            </div>
+            <div class="rounded-2xl bg-slate-900 p-5 text-white dark:bg-green-600">
+              <p class="text-xs text-white/70">知识库</p>
+              <p class="mt-2 text-2xl font-bold">分类阅读</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="mx-auto w-full max-w-md">
+        <div class="mb-8 text-center lg:text-left">
+          <span class="text-4xl font-black text-green-500">✦</span>
+          <h1 class="mt-3 text-3xl font-bold tracking-tight">SmartHealth</h1>
+          <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">{{ isRegister ? '创建账户，开始建立你的健康闭环' : '欢迎回来，继续你的健康计划' }}</p>
+        </div>
+        <div class="rounded-3xl border border-slate-100 bg-surface-light p-7 shadow-premium dark:border-slate-800 dark:bg-surface-dark">
+          <div class="mb-6 grid grid-cols-2 rounded-2xl bg-slate-100 p-1 dark:bg-slate-950">
+            <button @click="isRegister=false;loginError=''" class="rounded-xl py-2 text-sm font-semibold transition" :class="!isRegister ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white' : 'text-slate-500'">登录</button>
+            <button @click="isRegister=true;loginError=''" class="rounded-xl py-2 text-sm font-semibold transition" :class="isRegister ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white' : 'text-slate-500'">注册</button>
+          </div>
+          <form @submit.prevent="handleLogin" class="space-y-4">
+            <div>
+              <label class="mb-2 block text-sm font-medium text-slate-500 dark:text-slate-400">用户名</label>
+              <input v-model="loginForm.username" required autocomplete="username" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-medium outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-500/20 dark:border-slate-800 dark:bg-background-dark dark:text-white">
+            </div>
+            <div v-if="isRegister">
+              <label class="mb-2 block text-sm font-medium text-slate-500 dark:text-slate-400">邮箱</label>
+              <input v-model="loginForm.email" type="email" autocomplete="email" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-medium outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-500/20 dark:border-slate-800 dark:bg-background-dark dark:text-white">
+            </div>
+            <div>
+              <label class="mb-2 block text-sm font-medium text-slate-500 dark:text-slate-400">密码</label>
+              <input v-model="loginForm.password" type="password" required autocomplete="current-password" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-medium outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-500/20 dark:border-slate-800 dark:bg-background-dark dark:text-white">
+            </div>
+            <div v-if="loginError" class="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-500 dark:bg-red-900/20">{{ loginError }}</div>
+            <button type="submit" :disabled="loginLoading" class="w-full rounded-xl bg-slate-900 py-3 font-semibold text-white transition hover:bg-green-600 disabled:opacity-50 dark:bg-green-600">{{ loginLoading ? '处理中...' : isRegister ? '创建账户' : '进入看板' }}</button>
+          </form>
+        </div>
+      </section>
     </div>
   </div>
 
@@ -43,21 +87,43 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
+import { useThemeStore } from '@/stores/theme'
 import request from '@/api/request'
 import DashboardView from '@/views/DashboardView.vue'
+import PlanView from '@/views/PlanView.vue'
 import CheckinView from '@/views/CheckinView.vue'
 import ProfileView from '@/views/ProfileView.vue'
+import ReportView from '@/views/ReportView.vue'
+import NotificationView from '@/views/NotificationView.vue'
+import KnowledgeView from '@/views/KnowledgeView.vue'
 import RankView from '@/views/RankView.vue'
 import SettingsView from '@/views/SettingsView.vue'
+import AdminView from '@/views/AdminView.vue'
 import OnboardingModal from '@/components/OnboardingModal.vue'
 
 const userStore = useUserStore()
+const themeStore = useThemeStore()
 const isLoggedIn = computed(() => userStore.isLoggedIn)
 const activeView = ref(localStorage.getItem('activeView') || 'dashboard')
 const showOnboarding = ref(false)
-const viewMap = { dashboard: DashboardView, checkin: CheckinView, profile: ProfileView, rank: RankView, settings: SettingsView }
-const currentView = computed(() => viewMap[activeView.value])
-const tabs = [{ id: 'dashboard', label: '今日看板' },{ id: 'checkin', label: '每日打卡' },{ id: 'profile', label: '健康档案' },{ id: 'rank', label: '排行榜' }]
+const isAdmin = computed(() => userStore.userInfo?.role === 'ADMIN')
+const viewMap = { dashboard: DashboardView, plan: PlanView, checkin: CheckinView, report: ReportView, notifications: NotificationView, profile: ProfileView, knowledge: KnowledgeView, rank: RankView, settings: SettingsView, admin: AdminView }
+const currentView = computed(() => {
+  if (activeView.value === 'admin' && !isAdmin.value) return DashboardView
+  return viewMap[activeView.value] || DashboardView
+})
+const tabs = computed(() => {
+  const baseTabs = [
+    { id: 'dashboard', label: '今日看板' },
+    { id: 'plan', label: '计划' },
+    { id: 'checkin', label: '打卡' },
+    { id: 'report', label: '报告' },
+    { id: 'notifications', label: '提醒' },
+    { id: 'knowledge', label: '知识' },
+    { id: 'rank', label: '排行' },
+  ]
+  return isAdmin.value ? [...baseTabs, { id: 'admin', label: '管理后台' }] : baseTabs
+})
 const avatarUrl = ref('')
 const initial = computed(() => (userStore.userInfo?.nickname || userStore.userInfo?.username || '?')[0].toUpperCase())
 
@@ -70,12 +136,17 @@ const loginError = ref('')
 async function loadAvatar() {
   try {
     const r = await request.get('/user/profile')
-    const a = r.data?.avatarUrl
-    if (a) {
-      avatarUrl.value = a
-      userStore.userInfo = { ...userStore.userInfo, avatarUrl: a }
-      localStorage.setItem('userInfo', JSON.stringify(userStore.userInfo))
+    const profile = r.data || {}
+    const a = profile.avatarUrl
+    if (a) avatarUrl.value = a
+    userStore.userInfo = {
+      ...userStore.userInfo,
+      username: profile.username || userStore.userInfo?.username,
+      nickname: profile.nickname || userStore.userInfo?.nickname,
+      avatarUrl: a || userStore.userInfo?.avatarUrl,
+      role: profile.role || userStore.userInfo?.role || 'USER',
     }
+    localStorage.setItem('userInfo', JSON.stringify(userStore.userInfo))
   } catch (e) { /* ignore */ }
 }
 
@@ -87,11 +158,7 @@ async function handleLogin() {
     await loadAvatar()
     // 跟随用户上次保存的主题偏好，没有记录则默认深色
     const savedDark = localStorage.getItem('darkMode')
-    if (savedDark === null || savedDark === 'true') {
-      document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-    }
+    themeStore.applyTheme()
   } catch (e) { loginError.value = e.message || '操作失败' } finally { loginLoading.value = false }
 }
 

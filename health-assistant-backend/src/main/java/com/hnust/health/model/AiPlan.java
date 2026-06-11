@@ -32,5 +32,8 @@ public class AiPlan {
     /** DeepSeek的高阶思维链推理过程记录 */
     private String llmReasoningChain;
 
+    /** PENDING_REVIEW / APPROVED / REJECTED */
+    private String status;
+
     private LocalDateTime createdAt;
 }

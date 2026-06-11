@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS `ai_plan` (
   `diet_plan_json`           JSON     NOT NULL COMMENT 'DeepSeek生成的饮食处方',
   `workout_plan_json`        JSON     NOT NULL COMMENT 'DeepSeek生成的运动处方',
   `llm_reasoning_chain`      TEXT     COMMENT 'AI思维链推理过程记录',
+  `status`                   VARCHAR(24) NOT NULL DEFAULT 'APPROVED' COMMENT '计划状态: PENDING_REVIEW/APPROVED/REJECTED',
   `created_at`               DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_user_cycle` (`user_id`, `cycle_start_date` DESC),

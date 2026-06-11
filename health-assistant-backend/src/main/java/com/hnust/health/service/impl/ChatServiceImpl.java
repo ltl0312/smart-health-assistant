@@ -9,6 +9,7 @@ import com.hnust.health.util.WeightTrendAnalyzer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -50,7 +51,15 @@ public class ChatServiceImpl implements ChatService {
         ctx.append("\n用户消息：").append(message).append("\n\n");
         ctx.append("请友好简洁地回复。如果用户要求生成计划，请生成包含diet_plan（7天详细饮食）和workout_plan（7天运动）的JSON，并在回复中说明已生成。");
 
-        String reply = deepSeekService.chat(ctx.toString(), message);
+        String reply;
+        try {
+            reply = deepSeekService.chat(ctx.toString(), message);
+        } catch (Exception e) {
+            Map<String, Object> fallback = new LinkedHashMap<>();
+            fallback.put("reply", buildFallbackReply(message, trend));
+            fallback.put("aiAvailable", false);
+            return fallback;
+        }
 
         Map<String, Object> result = new LinkedHashMap<>();
         // 清除markdown和JSON，只保留自然语言
@@ -66,17 +75,30 @@ public class ChatServiceImpl implements ChatService {
                     var root = om.readTree(json);
                     AiPlan plan = new AiPlan();
                     plan.setUserId(userId);
-                    plan.setCycleStartDate(java.time.LocalDate.now());
+                    plan.setCycleStartDate(LocalDate.now().with(DayOfWeek.MONDAY));
                     plan.setMemoryContextSnapshot(om.writeValueAsString(Map.of("description", trend.trendDescription(), "startWeight", trend.startWeight(), "endWeight", trend.endWeight())));
-                    plan.setDietPlanJson(root.has("diet_plan") ? om.writeValueAsString(root.get("diet_plan")) : null);
-                    plan.setWorkoutPlanJson(root.has("workout_plan") ? om.writeValueAsString(root.get("workout_plan")) : null);
-                    plan.setLlmReasoningChain(reply.replaceAll("```[\\s\\S]*?```", "").replaceAll("[\\[\\{][\\s\\S]*[\\]\\}]", "").trim());
+                    plan.setDietPlanJson(root.has("diet_plan") ? om.writeValueAsString(root.get("diet_plan")) : "{}");
+                    plan.setWorkoutPlanJson(root.has("workout_plan") ? om.writeValueAsString(root.get("workout_plan")) : "{}");
+                    plan.setLlmReasoningChain(reply.replaceAll("```[\\s\\S]*?```", "").replaceAll("[\\[\\{][\\s\\S]*[\\]\\}]", "").replaceAll("\\n{3,}", "\n\n").trim());
+                    plan.setStatus("PENDING_REVIEW");
                     aiPlanMapper.insert(plan);
                     result.put("planId", plan.getId());
+                    result.put("planStatus", plan.getStatus());
                 }
             } catch (Exception ignored) {}
         }
         return result;
+    }
+
+    private String buildFallbackReply(String message, WeightTrendAnalyzer.TrendResult trend) {
+        StringBuilder reply = new StringBuilder("AI服务暂时不可用，我先给你一些基础建议：\n");
+        reply.append("1. 今天保持规律三餐，优先选择高蛋白、蔬菜和主食适量搭配。\n");
+        reply.append("2. 饮水建议保持 1.5-2 升，运动后适当增加。\n");
+        reply.append("3. 如果身体状态允许，安排 20-30 分钟轻中等强度活动。\n");
+        if (trend.trendDescription() != null) {
+            reply.append("4. 当前体重趋势：").append(trend.trendDescription()).append("。");
+        }
+        return reply.toString();
     }
 
     /**

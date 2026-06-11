@@ -37,9 +37,15 @@
     <div class="space-y-6">
       <div class="sticky top-28 space-y-6">
         <div class="bg-surface-light dark:bg-surface-dark rounded-3xl p-8 shadow-premium dark:shadow-premium-dark border border-slate-50 dark:border-slate-800 transition-colors">
-          <div class="flex items-center gap-2 mb-4"><span class="text-green-500 text-lg">💬</span><h3 class="font-bold">每日健康金句</h3></div>
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2"><span class="text-green-500 text-lg">💬</span><h3 class="font-bold">每日健康金句</h3></div>
+            <button @click="refreshQuote" class="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-500 hover:text-green-600 dark:border-slate-700">刷新</button>
+          </div>
           <div v-if="quoteLoading" class="py-8 text-center"><div class="w-full h-4 rounded-full skeleton-shimmer mb-3"></div><div class="w-3/4 h-4 rounded-full skeleton-shimmer"></div></div>
-          <div v-else-if="quoteText" class="py-4"><p class="text-lg font-serif italic text-slate-700 dark:text-slate-300 leading-relaxed">"{{ quoteText }}"</p></div>
+          <div v-else-if="quoteText" class="py-4">
+            <p class="text-lg font-serif italic text-slate-700 dark:text-slate-300 leading-relaxed">"{{ quoteText }}"</p>
+            <p class="mt-3 text-xs text-slate-400">{{ quoteDate }} · {{ quoteCached ? '今日已缓存' : '今日生成' }}</p>
+          </div>
         </div>
         <QuickCheckinPanel />
       </div>
@@ -102,6 +108,8 @@ const showScoreRule = ref(false)
 // Health quotes - auto refresh on mount
 const quoteText = ref('')
 const quoteLoading = ref(false)
+const quoteDate = ref('')
+const quoteCached = ref(false)
 
 async function fetchRank() {
   try { const r = await request.get('/rank/health', { params: { period: period.value } }); rankings.value = r.data || [] } catch (e) { /* ignore */ }
@@ -109,8 +117,52 @@ async function fetchRank() {
 function showUserDetail(item) { selectedUser.value = item }
 
 async function loadQuote() {
+  const key = quoteCacheKey()
+  const cached = localStorage.getItem(key)
+  if (cached) {
+    try {
+      const data = JSON.parse(cached)
+      quoteText.value = data.quote || fallbackQuote()
+      quoteDate.value = data.date || todayKey()
+      quoteCached.value = true
+      return
+    } catch {
+      localStorage.removeItem(key)
+    }
+  }
   quoteLoading.value = true
-  try { const r = await request.get('/quote/health'); quoteText.value = r.data?.quote || '' } catch (e) { /* ignore */ } finally { quoteLoading.value = false }
+  try {
+    const r = await request.get('/quote/health')
+    quoteText.value = r.data?.quote || fallbackQuote()
+    quoteDate.value = r.data?.date || todayKey()
+    quoteCached.value = Boolean(r.data?.cached)
+    localStorage.setItem(key, JSON.stringify({ quote: quoteText.value, date: quoteDate.value }))
+  } catch (e) {
+    quoteText.value = fallbackQuote()
+    quoteDate.value = todayKey()
+  } finally {
+    quoteLoading.value = false
+  }
+}
+
+async function refreshQuote() {
+  localStorage.removeItem(quoteCacheKey())
+  await loadQuote()
+}
+
+function fallbackQuote() {
+  return '健康不是某一天的冲刺，而是每天温柔地照顾自己。'
+}
+
+function todayKey() {
+  const d = new Date()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${month}-${day}`
+}
+
+function quoteCacheKey() {
+  return `dailyQuote:${myUserId || 'guest'}:${todayKey()}`
 }
 
 onMounted(() => { fetchRank(); loadQuote() })

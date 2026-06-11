@@ -40,4 +40,9 @@ public class WeightController {
             @RequestAttribute(REQUEST_ATTR_USER_ID) Long userId) {
         return Result.ok(weightRecordService.getWeightHistory(userId, days));
     }
+
+    @GetMapping("/weekly-status")
+    public Result<Map<String, Object>> getWeeklyStatus(@RequestAttribute(REQUEST_ATTR_USER_ID) Long userId) {
+        return Result.ok(weightRecordService.getWeeklyStatus(userId));
+    }
 }

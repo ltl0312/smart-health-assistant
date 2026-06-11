@@ -48,9 +48,14 @@ public class MarkdownGenerator {
             md.append(formatCheckinSummary(checkins, plan.getCycleStartDate())).append("\n\n");
         }
 
-        // AI推理
+        // AI推理 — 每行加 > 前缀，合并多余空行
         if (plan.getLlmReasoningChain() != null && !plan.getLlmReasoningChain().isBlank()) {
-            md.append("## 🧠 AI 推理过程\n\n> ").append(plan.getLlmReasoningChain()).append("\n\n");
+            md.append("## 🧠 AI 推理过程\n\n");
+            String reasoning = plan.getLlmReasoningChain().replaceAll("\\n{3,}", "\n\n");
+            for (String line : reasoning.split("\n")) {
+                md.append("> ").append(line).append("\n");
+            }
+            md.append("\n");
         }
         md.append("---\n\n*📝 由智能健康助手 AI 自动生成*\n");
         return md.toString();

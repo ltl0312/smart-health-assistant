@@ -53,6 +53,11 @@ public class PromptBuilder {
         sb.append("重要约束：\n");
         sb.append("- foods数组中每项必须包含食物名称和份量，如\"鸡胸肉150g\"\n");
         sb.append("- exercises数组中每项必须包含动作名称和组数次数，如\"杠铃深蹲 4组×8次\"\n");
+        sb.append("- 必须生成 day1 到 day7 共7天，不能只生成3天或复用同一天\n");
+        sb.append("- 7天餐食不能高度重复；早餐、午餐、晚餐至少各提供5种不同组合\n");
+        sb.append("- 每天都要有早餐、午餐、晚餐；可按需要增加加餐\n");
+        sb.append("- weekly_schedule 必须包含周一到周日7条，训练类型和强度要有变化，恢复日也要写清楚\n");
+        sb.append("- 周一是本周第一天；日期展示由系统计算，请不要把周二当作周一\n");
         sb.append("- 热量缺口不超过每日总消耗25%，蛋白质不低于1.6g/kg\n");
         sb.append("- 只输出JSON，不要输出任何解释文字或markdown标记\n");
 

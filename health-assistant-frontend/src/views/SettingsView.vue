@@ -69,15 +69,18 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useUserStore } from '@/stores/user'
+import { useThemeStore } from '@/stores/theme'
 import request from '@/api/request'
 
 const emit = defineEmits(['logout'])
 const userStore = useUserStore()
+const themeStore = useThemeStore()
 const profile = ref({})
 const avatarPreview = ref('')
 const initial = ref('?')
-const isDark = ref(document.documentElement.classList.contains('dark'))
+const { darkMode: isDark } = storeToRefs(themeStore)
 const deleting = ref(false)
 
 const form = reactive({ nickname: '', phone: '', email: '', bio: '' })
@@ -110,9 +113,7 @@ async function changePw() {
   try { await request.put('/user/password', { oldPassword: pw.old, newPassword: pw.new1 }); pwMsg.value = '密码修改成功'; pwOk.value = true; pw.old = ''; pw.new1 = ''; pw.new2 = '' } catch (e) { pwMsg.value = e.message; pwOk.value = false } finally { pwSaving.value = false }
 }
 function toggleDark() {
-  isDark.value = !isDark.value
-  document.documentElement.classList.toggle('dark', isDark.value)
-  localStorage.setItem('darkMode', isDark.value)
+  themeStore.toggleTheme()
 }
 async function deleteAccount() {
   if (!confirm('确定注销账户？注销后无法登录。')) return

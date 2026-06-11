@@ -14,4 +14,5 @@ public class PlanResponse {
     private String dietPlanJson;
     private String workoutPlanJson;
     private String llmReasoningChain;
+    private String status;
 }

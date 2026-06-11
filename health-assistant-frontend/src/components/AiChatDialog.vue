@@ -1,9 +1,9 @@
 <template>
-  <div class="bg-surface-light dark:bg-surface-dark rounded-3xl p-6 shadow-premium dark:shadow-premium-dark border border-slate-50 dark:border-slate-800 h-full flex flex-col transition-colors" style="min-height: 420px;">
+  <div class="bg-surface-light dark:bg-surface-dark rounded-3xl p-5 shadow-premium dark:shadow-premium-dark border border-slate-50 dark:border-slate-800 flex flex-col transition-colors" style="min-height: 460px;">
     <div class="flex items-center gap-2 mb-4"><div class="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"></div><span class="text-xs font-semibold text-slate-400 uppercase tracking-widest">AI 健康助手</span></div>
 
-    <div class="flex-1 overflow-y-auto space-y-3 mb-6 max-h-[340px] min-h-[280px]" ref="msgContainer">
-      <div v-if="chatStore.messages.length===0" class="text-center py-8 text-slate-400 text-sm">
+    <div class="flex-1 overflow-y-auto space-y-3 mb-4 max-h-[360px] min-h-[260px]" ref="msgContainer">
+      <div v-if="chatStore.messages.length===0" class="text-center py-5 text-slate-400 text-sm">
         <p>👋 你好！我是你的专属健康助手。</p>
         <p class="mt-1">试试说「生成本周计划」或「帮我调整饮食方案」</p>
       </div>
@@ -42,7 +42,7 @@ async function send() {
   try {
     const res = await request.post('/chat/message', { message: chatStore.messages[chatStore.messages.length-1].content })
     chatStore.addMessage('ai', res.data.reply)
-    if (res.data.planId) chatStore.addMessage('ai', '✅ 计划已生成并存档，可在「健康档案」中查看。')
+    if (res.data.planId) chatStore.addMessage('ai', '计划已生成，已放入「计划」页等待你审核，应用后才会开始执行。')
   } catch (e) { chatStore.addMessage('ai', '抱歉，AI服务暂时不可用。') }
   finally { loading.value = false; await nextTick(); scrollDown() }
 }
