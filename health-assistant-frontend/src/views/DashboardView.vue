@@ -53,22 +53,15 @@
         </div>
 
         <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6">
-          <h2 class="font-bold">提醒与异常</h2>
+          <div class="flex items-center justify-between">
+            <h2 class="font-bold">推荐阅读</h2>
+            <button @click="go('knowledge')" class="text-xs text-green-600">知识库</button>
+          </div>
           <div class="mt-4 space-y-3">
-            <article v-for="alert in alerts.slice(0, 3)" :key="alert.id" class="rounded-xl bg-slate-50 dark:bg-slate-950 p-3">
-              <div class="flex items-start justify-between gap-3">
-                <div>
-                  <p class="text-sm font-semibold">{{ alert.title }}</p>
-                  <p class="mt-1 text-xs leading-5 text-slate-500">{{ alert.message }}</p>
-                </div>
-                <button @click="readAlert(alert.id)" class="text-xs text-green-600">已读</button>
-              </div>
+            <article v-for="article in articleRecommendations" :key="article.id" class="rounded-xl bg-slate-50 p-3 dark:bg-slate-950">
+              <p class="text-sm font-semibold">{{ article.title }}</p>
+              <p class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{{ article.summary }}</p>
             </article>
-            <article v-for="reminder in reminders.slice(0, 2)" :key="`r-${reminder.id}`" class="rounded-xl bg-green-50 dark:bg-green-900/20 p-3">
-              <p class="text-sm font-semibold">{{ reminder.title }}</p>
-              <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ reminder.message }}</p>
-            </article>
-            <p v-if="!alerts.length && !reminders.length" class="text-sm text-slate-400">暂无提醒，今天状态不错。</p>
           </div>
         </div>
       </div>
@@ -146,34 +139,6 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6">
-            <div class="flex items-center justify-between">
-              <h2 class="font-bold">今日行动</h2>
-              <button @click="go('notifications')" class="text-xs text-green-600">查看全部</button>
-            </div>
-            <div class="mt-4 space-y-3">
-              <article v-for="reminder in reminders.slice(0, 3)" :key="`quick-${reminder.id}`" class="rounded-xl bg-slate-50 p-3 dark:bg-slate-950">
-                <p class="text-sm font-semibold">{{ reminder.title }}</p>
-                <p class="mt-1 text-xs leading-5 text-slate-500">{{ reminder.message }}</p>
-              </article>
-              <p v-if="!reminders.length" class="text-sm text-slate-400">暂无待办提醒。</p>
-            </div>
-          </div>
-
-          <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6">
-            <div class="flex items-center justify-between">
-              <h2 class="font-bold">推荐阅读</h2>
-              <button @click="go('knowledge')" class="text-xs text-green-600">知识库</button>
-            </div>
-            <div class="mt-4 space-y-3">
-              <article v-for="article in articleRecommendations" :key="article.id" class="rounded-xl bg-slate-50 p-3 dark:bg-slate-950">
-                <p class="text-sm font-semibold">{{ article.title }}</p>
-                <p class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{{ article.summary }}</p>
-              </article>
-            </div>
-          </div>
-        </div>
       </div>
     </section>
   </div>
@@ -194,8 +159,6 @@ const greetingWord = h < 12 ? '早上好' : h < 18 ? '下午好' : '晚上好'
 
 const report = ref({})
 const goal = ref({})
-const alerts = ref([])
-const reminders = ref([])
 const weightHistory = ref([])
 const weeklyStatus = ref({})
 const backfillDate = ref('')
@@ -235,18 +198,14 @@ const backfillOptions = computed(() => (weeklyStatus.value.backfillableWeeks || 
 onMounted(loadAll)
 
 async function loadAll() {
-  const [goalRes, reportRes, alertRes, reminderRes, weeklyRes, articleRes] = await Promise.all([
+  const [goalRes, reportRes, weeklyRes, articleRes] = await Promise.all([
     featureApi.getGoal(),
     featureApi.reportSummary(7),
-    featureApi.getAlerts(),
-    featureApi.getReminders(),
     featureApi.weightWeeklyStatus(),
     featureApi.articles(),
   ])
   goal.value = goalRes.data || {}
   report.value = reportRes.data || {}
-  alerts.value = alertRes.data || []
-  reminders.value = reminderRes.data || []
   weeklyStatus.value = weeklyRes.data || {}
   articleRecommendations.value = (articleRes.data || []).slice(0, 2)
   if (!backfillDate.value && backfillOptions.value.length) {
@@ -286,11 +245,6 @@ function fillMeal(sample) {
 async function estimateExercise() {
   const res = await featureApi.estimateExercise(exercise)
   exerciseResult.value = res.data
-}
-
-async function readAlert(id) {
-  await featureApi.readAlert(id)
-  alerts.value = alerts.value.filter(a => a.id !== id)
 }
 
 function todayDate() {

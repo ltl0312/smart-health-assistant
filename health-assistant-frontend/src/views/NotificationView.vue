@@ -23,17 +23,27 @@
           <h2 class="font-bold">{{ group.title }}</h2>
           <span class="text-xs text-slate-400">{{ group.items.length }} 条</span>
         </div>
-        <div class="mt-4 space-y-3">
-          <article v-for="reminder in group.items" :key="reminder.id" class="rounded-xl bg-slate-50 p-4 dark:bg-slate-950">
-            <p class="font-semibold">{{ reminder.title }}</p>
-            <p class="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">{{ reminder.message }}</p>
-            <p class="mt-2 text-xs text-slate-400">{{ formatTime(reminder.dueAt || reminder.createdAt) }}</p>
-            <div class="mt-3 flex gap-2">
-              <button v-if="reminder.actionView" @click="go(reminder.actionView)" class="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white dark:bg-green-600">去处理</button>
-              <button @click="doneReminder(reminder.id)" class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-500 dark:border-slate-700">完成</button>
-            </div>
-          </article>
-          <p v-if="!group.items.length" class="rounded-xl bg-slate-50 p-5 text-sm text-slate-400 dark:bg-slate-950">暂无{{ group.title }}。</p>
+        <div class="mt-4" :class="{ 'max-h-[420px] overflow-y-auto pr-1': group.expanded }">
+          <div class="space-y-3">
+            <article v-for="reminder in group.visibleItems" :key="reminder.id" class="rounded-xl bg-slate-50 p-4 dark:bg-slate-950">
+              <p class="font-semibold">{{ reminder.title }}</p>
+              <p class="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">{{ reminder.message }}</p>
+              <p class="mt-2 text-xs text-slate-400">{{ formatTime(reminder.dueAt || reminder.createdAt) }}</p>
+              <div class="mt-3 flex gap-2">
+                <button v-if="reminder.actionView" @click="go(reminder.actionView)" class="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white dark:bg-green-600">去处理</button>
+                <button @click="doneReminder(reminder.id)" class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-500 dark:border-slate-700">完成</button>
+              </div>
+            </article>
+            <p v-if="!group.items.length" class="rounded-xl bg-slate-50 p-5 text-sm text-slate-400 dark:bg-slate-950">暂无{{ group.title }}。</p>
+          </div>
+        </div>
+        <div v-if="group.items.length > 3" class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+          <button v-if="!group.expanded" @click="group.expanded = true" class="text-sm font-semibold text-green-600 dark:text-green-400 hover:underline">
+            显示更多 ({{ group.items.length - 3 }} 条)
+          </button>
+          <button v-else @click="group.expanded = false" class="text-sm font-semibold text-slate-500 hover:underline">
+            收起
+          </button>
         </div>
       </div>
     </section>
@@ -61,7 +71,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { featureApi } from '@/api/features'
 
 const alerts = ref([])
@@ -70,13 +80,18 @@ const reminders = ref([])
 const stats = computed(() => [
   { label: '今日行动', value: grouped('TODAY').length, hint: '饮水、打卡、体重等即时任务' },
   { label: '计划提醒', value: grouped('PLAN').length, hint: '周计划和待审核计划' },
-  { label: '风险提示', value: alerts.value.length, hint: 'BMI、体重波动、运动不足' },
+  { label: '习惯建议', value: grouped('RISK').length, hint: 'BMI、体重波动、运动不足' },
 ])
 
+const expandState = reactive({ TODAY: false, PLAN: false, RISK: false })
+
 const reminderGroups = computed(() => [
-  { key: 'TODAY', title: '今日行动', items: grouped('TODAY') },
-  { key: 'PLAN', title: '计划提醒', items: grouped('PLAN') },
-  { key: 'RISK', title: '习惯建议', items: reminders.value.filter(item => !['TODAY', 'PLAN'].includes(item.groupType)) },
+  { key: 'TODAY', title: '今日行动', items: grouped('TODAY'), expanded: expandState.TODAY,
+    get visibleItems() { return this.expanded ? this.items : this.items.slice(0, 3) } },
+  { key: 'PLAN', title: '计划提醒', items: grouped('PLAN'), expanded: expandState.PLAN,
+    get visibleItems() { return this.expanded ? this.items : this.items.slice(0, 3) } },
+  { key: 'RISK', title: '习惯建议', items: grouped('RISK'), expanded: expandState.RISK,
+    get visibleItems() { return this.expanded ? this.items : this.items.slice(0, 3) } },
 ])
 
 onMounted(load)

@@ -19,11 +19,15 @@ npm run dev                                # Vite dev server on :5173
 npm run build                              # production build → dist/
 npm run test                                # Vitest
 
-# Docker (full stack)
-docker compose up -d --build               # deploy all 4 services
-docker compose up -d --build backend       # rebuild backend only
-docker compose logs backend --tail 50      # check logs
+# Docker (full stack — root Dockerfile builds single image)
+docker compose up -d --build               # deploy all services (app + mysql + redis)
+docker compose up -d --build app           # rebuild app only
+docker compose logs app --tail 50          # check app logs
 docker compose ps                          # status
+docker compose down                        # stop all
+# Single image (without compose):
+docker build -t smart-health-assistant .   # build root Dockerfile
+docker run -p 80:80 --env-file .env smart-health-assistant  # run standalone
 ```
 
 ## Architecture

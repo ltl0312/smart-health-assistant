@@ -1,0 +1,59 @@
+# ============================================================
+# 智能健康助手 — Docker 构建忽略文件
+# ============================================================
+# 排除 node_modules、构建产物、IDE 配置等，
+# 减少构建上下文体积，加速 docker build
+
+# ---- 依赖 & 构建产物 ----
+node_modules/
+**/node_modules/
+**/dist/
+**/target/
+*.jar
+*.war
+
+# ---- IDE & 编辑器 ----
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+
+# ---- 操作系统 ----
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# ---- 版本控制 ----
+.git/
+.gitignore
+.gitattributes
+
+# ---- 文档 & 脚本 (非运行时) ----
+README.md
+LICENSE
+*.md
+!CLAUDE.md
+
+# ---- 环境配置 ----
+.env
+.env.local
+.env.*.local
+
+# ---- 日志 ----
+*.log
+logs/
+**/logs/
+
+# ---- 测试 ----
+**/__tests__/
+**/*.spec.js
+**/*.test.js
+**/*.spec.ts
+**/*.test.ts
+
+# ---- 临时文件 ----
+tmp/
+temp/
+*.tmp

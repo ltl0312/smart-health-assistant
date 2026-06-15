@@ -1,22 +1,114 @@
 # ============================================================
-# 智能健康助手 - Docker 编排配置 v2
+# 智能健康助手 — Docker Compose 编排配置
+# ============================================================
+# 启动:  docker compose up -d
+# 查看:  docker compose ps
+# 日志:  docker compose logs -f app
+# 停止:  docker compose down
+# ============================================================
+#
+# 服务架构:
+#   ┌────────────┐
+#   │   Nginx:80 │── 前端 SPA 静态文件
+#   │   Java:8080│── Spring Boot REST API
+#   │  (app 容器) │    单体镜像，入口 docker/entrypoint.sh
+#   └─────┬──────┘
+#         │ 依赖
+#   ┌─────┴──────┐
+#   │   MySQL:8  │── 持久化数据
+#   │   Redis:7  │── 缓存 & 排行榜
+#   └────────────┘
+#
+# 环境变量优先级: .env 文件 > shell 环境变量 > compose 默认值
+# 复制 .env.example → .env 后填入真实值
 # ============================================================
 
 services:
-  # ---- MySQL 8.x 数据库 ----
+  # =========================================================
+  # 主应用 — 前端 (Nginx) + 后端 (Spring Boot) 单体容器
+  # =========================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: smart-health-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-80}:80"
+    environment:
+      # ---- 服务端口 ----
+      SERVER_PORT: 8080
+
+      # ---- MySQL 数据库 ----
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/smart_health_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true"
+      SPRING_DATASOURCE_USERNAME: "${SPRING_DATASOURCE_USERNAME:-root}"
+      SPRING_DATASOURCE_PASSWORD: "${MYSQL_PASSWORD}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD}"
+
+      # ---- Redis ----
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+
+      # ---- JWT ----
+      JWT_SECRET: "${JWT_SECRET}"
+      JWT_EXPIRATION: "${JWT_EXPIRATION:-604800000}"
+
+      # ---- DeepSeek AI ----
+      DEEPSEEK_BASE_URL: "${DEEPSEEK_BASE_URL:-https://api.deepseek.com}"
+      DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY}"
+      DEEPSEEK_MODEL: "${DEEPSEEK_MODEL:-deepseek-v4-pro}"
+      DEEPSEEK_TIMEOUT_MS: "${DEEPSEEK_TIMEOUT_MS:-120000}"
+      DEEPSEEK_TEMPERATURE: "${DEEPSEEK_TEMPERATURE:-0.2}"
+      DEEPSEEK_MAX_TOKENS: "${DEEPSEEK_MAX_TOKENS:-4096}"
+
+      # ---- CORS ----
+      APP_CORS_ALLOWED_ORIGINS: "${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:80,http://localhost}"
+
+      # ---- 文件上传 ----
+      UPLOAD_AVATAR_MAX_SIZE: "${UPLOAD_AVATAR_MAX_SIZE:-5242880}"
+      UPLOAD_AVATAR_PATH: "/app/uploads/avatars/"
+
+      # ---- MyBatis 日志（生产环境建议设为空或关闭） ----
+      MYBATIS_LOG_IMPL: "${MYBATIS_LOG_IMPL:-org.apache.ibatis.logging.stdout.StdOutImpl}"
+
+    volumes:
+      # 头像上传持久化
+      - uploads-data:/app/uploads
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    networks:
+      - app-network
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+
+  # =========================================================
+  # MySQL 8.x 数据库
+  # =========================================================
   mysql:
     image: mysql:8.0
     container_name: smart-health-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-smart_health_db}
+      MYSQL_ROOT_PASSWORD: "${MYSQL_PASSWORD}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE:-smart_health_db}"
       MYSQL_CHARSET: utf8mb4
       MYSQL_COLLATION: utf8mb4_unicode_ci
     ports:
-      - "3307:3306"
+      # 映射到非标准端口避免宿主机端口冲突
+      - "${MYSQL_PORT:-3307}:3306"
     volumes:
       - mysql-data:/var/lib/mysql
+      # 首次启动自动建表
       - ./health-assistant-backend/src/main/resources/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
@@ -27,14 +119,16 @@ services:
     networks:
       - app-network
 
-  # ---- Redis 7.x 缓存 ----
+  # =========================================================
+  # Redis 7.x 缓存
+  # =========================================================
   redis:
     image: redis:7-alpine
     container_name: smart-health-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
-    command: redis-server --appendonly yes
+      - "${REDIS_PORT:-6379}:6379"
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
     volumes:
       - redis-data:/data
     healthcheck:
@@ -45,49 +139,9 @@ services:
     networks:
       - app-network
 
-  # ---- Spring Boot 后端 ----
-  backend:
-    build:
-      context: ./health-assistant-backend
-      dockerfile: Dockerfile
-    container_name: smart-health-backend
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/smart_health_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
-      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-root}
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
-      SPRING_DATA_REDIS_HOST: redis
-      SPRING_DATA_REDIS_PORT: 6379
-      JWT_SECRET: ${JWT_SECRET}
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
-      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:80,http://localhost}
-    volumes:
-      # 头像上传目录持久化
-      - uploads-data:/app/uploads
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - app-network
-
-  # ---- Vue3 前端 (Nginx) ----
-  frontend:
-    build:
-      context: ./health-assistant-frontend
-      dockerfile: Dockerfile
-    container_name: smart-health-frontend
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
-    networks:
-      - app-network
-
+# ===========================================================
+# 持久化卷
+# ===========================================================
 volumes:
   mysql-data:
     driver: local
@@ -96,6 +150,9 @@ volumes:
   uploads-data:
     driver: local
 
+# ===========================================================
+# 网络
+# ===========================================================
 networks:
   app-network:
     driver: bridge

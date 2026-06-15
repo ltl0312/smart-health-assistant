@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hnust.health.config.DeepSeekConfig;
 import com.hnust.health.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -27,6 +28,7 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class WellnessFeatureService {
@@ -249,7 +251,7 @@ public class WellnessFeatureService {
         refreshAlerts(userId);
         return normalizeList(jdbcTemplate.queryForList("""
                 SELECT id, alert_type, title, message, severity, is_read, created_at, read_at
-                FROM health_alert WHERE user_id = ? ORDER BY is_read ASC, created_at DESC LIMIT 30
+                FROM health_alert WHERE user_id = ? AND is_read = 0 ORDER BY created_at DESC LIMIT 30
                 """, userId));
     }
 
@@ -258,6 +260,7 @@ public class WellnessFeatureService {
         jdbcTemplate.update("UPDATE health_alert SET is_read = 1, read_at = NOW() WHERE id = ? AND user_id = ?", id, userId);
     }
 
+    @Transactional
     public List<Map<String, Object>> reminders(Long userId) {
         ensureReminders(userId);
         return normalizeList(jdbcTemplate.queryForList("""
@@ -826,96 +829,257 @@ public class WellnessFeatureService {
         LocalDate weekStart = monday(today);
         LocalDateTime now = LocalDateTime.now(APP_ZONE);
         Map<String, Object> goal = getGoal(userId);
-
-        int waterTarget = intValue(goal.get("dailyWaterMl"), 2000);
-        int waterMl = intValue(queryScalar("""
-                SELECT COALESCE(SUM(water_cups), 0) * 250 FROM daily_checkin
-                WHERE user_id = ? AND record_date = ? AND checkin_type = 'WATER'
-                """, userId, Date.valueOf(today)), 0);
-        if (waterMl < waterTarget) {
-            upsertReminder(userId, "WATER", "WATER_" + today, "TODAY", "checkin",
-                    "今日饮水还差 " + Math.max(0, waterTarget - waterMl) + " ml",
-                    "根据你的每日饮水目标生成。现在已记录 " + waterMl + " ml，分两到三次补齐更容易坚持。",
-                    now.plusHours(2));
+        if (goal == null || goal.isEmpty()) {
+            log.warn("ensureReminders: goal is empty for userId={}, skipping", userId);
+            return;
         }
 
-        int todayCheckins = intValue(queryScalar("""
-                SELECT COUNT(*) FROM daily_checkin WHERE user_id = ? AND record_date = ?
-                """, userId, Date.valueOf(today)), 0);
-        if (todayCheckins == 0) {
-            upsertReminder(userId, "CHECKIN", "CHECKIN_" + today, "TODAY", "checkin",
-                    "今天还没有打卡",
-                    "这条提醒会根据当天记录动态生成。先补一条饮食、饮水或运动记录即可。",
-                    now.withHour(Math.min(21, Math.max(now.getHour() + 1, 18))).withMinute(0));
+        // --- 今日饮水 ---
+        try {
+            int waterTarget = intValue(goal.get("dailyWaterMl"), 2000);
+            int waterMl = intValue(queryScalar("""
+                    SELECT COALESCE(SUM(water_cups), 0) * 250 FROM daily_checkin
+                    WHERE user_id = ? AND record_date = ? AND checkin_type = 'WATER'
+                    """, userId, Date.valueOf(today)), 0);
+            if (waterMl < waterTarget) {
+                upsertReminder(userId, "WATER", "WATER_" + today, "TODAY", "checkin",
+                        "今日饮水还差 " + Math.max(0, waterTarget - waterMl) + " ml",
+                        "根据你的每日饮水目标生成。现在已记录 " + waterMl + " ml，分两到三次补齐更容易坚持。",
+                        now.plusHours(2));
+            }
+        } catch (Exception e) {
+            log.error("ensureReminders WATER failed for userId={}", userId, e);
         }
 
-        int weightRecordsThisWeek = intValue(queryScalar("""
-                SELECT COUNT(*) FROM weight_record
-                WHERE user_id = ? AND record_date BETWEEN ? AND ?
-                """, userId, Date.valueOf(weekStart), Date.valueOf(weekStart.plusDays(6))), 0);
-        if (weightRecordsThisWeek == 0) {
-            upsertReminder(userId, "WEIGHT", "WEIGHT_" + weekStart, "TODAY", "dashboard",
-                    "本周体重未记录",
-                    "本周只需要记录一次体重。记录后看板会显示“本周体重已记录”。",
-                    now.plusHours(3));
+        // --- 今日打卡 ---
+        try {
+            int todayCheckins = intValue(queryScalar("""
+                    SELECT COUNT(*) FROM daily_checkin WHERE user_id = ? AND record_date = ?
+                    """, userId, Date.valueOf(today)), 0);
+            if (todayCheckins == 0) {
+                upsertReminder(userId, "CHECKIN", "CHECKIN_" + today, "TODAY", "checkin",
+                        "今天还没有打卡",
+                        "这条提醒会根据当天记录动态生成。先补一条饮食、饮水或运动记录即可。",
+                        now.withHour(Math.min(21, Math.max(now.getHour() + 1, 18))).withMinute(0));
+            }
+        } catch (Exception e) {
+            log.error("ensureReminders CHECKIN failed for userId={}", userId, e);
         }
 
-        for (int i = 1; i <= 2; i++) {
-            LocalDate start = weekStart.minusWeeks(i);
-            int count = intValue(queryScalar("""
+        // --- 本周体重 ---
+        try {
+            int weightRecordsThisWeek = intValue(queryScalar("""
                     SELECT COUNT(*) FROM weight_record
                     WHERE user_id = ? AND record_date BETWEEN ? AND ?
-                    """, userId, Date.valueOf(start), Date.valueOf(start.plusDays(6))), 0);
-            if (count == 0) {
-                upsertReminder(userId, "WEIGHT_BACKFILL", "WEIGHT_BACKFILL_" + start, "TODAY", "dashboard",
-                        "可补录 " + start.getMonthValue() + "." + start.getDayOfMonth() + " 这一周体重",
-                        "系统允许补录前两周体重。补齐后趋势图和周计划复盘会更准确。",
-                        now.plusHours(4));
+                    """, userId, Date.valueOf(weekStart), Date.valueOf(weekStart.plusDays(6))), 0);
+            if (weightRecordsThisWeek == 0) {
+                upsertReminder(userId, "WEIGHT", "WEIGHT_" + weekStart, "TODAY", "dashboard",
+                        "本周体重未记录",
+                        "本周只需要记录一次体重。记录后看板会显示'本周体重已记录'。",
+                        now.plusHours(3));
             }
+        } catch (Exception e) {
+            log.error("ensureReminders WEIGHT failed for userId={}", userId, e);
         }
 
-        int weeklyTarget = intValue(goal.get("weeklyExerciseMinutes"), 150);
-        int elapsedDays = Math.max(1, today.getDayOfWeek().getValue());
-        int expectedMinutes = (int) Math.ceil(weeklyTarget * elapsedDays / 7.0);
-        int exerciseMinutes = intValue(queryScalar("""
-                SELECT COALESCE(SUM(duration_min), 0) FROM daily_checkin
-                WHERE user_id = ? AND checkin_type = 'EXERCISE' AND record_date BETWEEN ? AND ?
-                """, userId, Date.valueOf(weekStart), Date.valueOf(today)), 0);
-        if (exerciseMinutes < expectedMinutes) {
-            upsertReminder(userId, "EXERCISE", "EXERCISE_" + weekStart, "TODAY", "checkin",
-                    "本周运动进度偏慢",
-                    "当前已记录 " + exerciseMinutes + " 分钟，按你的目标本周此时建议达到约 " + expectedMinutes + " 分钟。",
-                    now.plusHours(5));
-        }
-
-        Long approvedPlanId = queryLong("""
-                SELECT id FROM ai_plan WHERE user_id = ? AND COALESCE(status, 'APPROVED') = 'APPROVED'
-                ORDER BY cycle_start_date DESC, id DESC LIMIT 1
-                """, userId);
-        if (approvedPlanId != null) {
-            int pendingItems = intValue(queryScalar("""
-                    SELECT COUNT(*) FROM plan_item i
-                    JOIN plan_day d ON d.id = i.plan_day_id
-                    LEFT JOIN plan_execution e ON e.plan_item_id = i.id AND e.user_id = ?
-                    WHERE i.plan_id = ? AND d.plan_date <= ? AND COALESCE(e.status, 'PENDING') = 'PENDING'
-                    """, userId, approvedPlanId, Date.valueOf(today)), 0);
-            if (pendingItems > 0) {
-                upsertReminder(userId, "PLAN", "PLAN_PENDING_" + approvedPlanId + "_" + today, "PLAN", "plan",
-                        "周计划有 " + pendingItems + " 项待执行",
-                        "这条提醒来自已应用周计划。完成、跳过或调整状态后，进度会同步更新。",
-                        now.plusHours(1));
+        // --- 补录体重 ---
+        try {
+            for (int i = 1; i <= 2; i++) {
+                LocalDate start = weekStart.minusWeeks(i);
+                int count = intValue(queryScalar("""
+                        SELECT COUNT(*) FROM weight_record
+                        WHERE user_id = ? AND record_date BETWEEN ? AND ?
+                        """, userId, Date.valueOf(start), Date.valueOf(start.plusDays(6))), 0);
+                if (count == 0) {
+                    upsertReminder(userId, "WEIGHT_BACKFILL", "WEIGHT_BACKFILL_" + start, "TODAY", "dashboard",
+                            "可补录 " + start.getMonthValue() + "." + start.getDayOfMonth() + " 这一周体重",
+                            "系统允许补录前两周体重。补齐后趋势图和周计划复盘会更准确。",
+                            now.plusHours(4));
+                }
             }
+        } catch (Exception e) {
+            log.error("ensureReminders WEIGHT_BACKFILL failed for userId={}", userId, e);
         }
 
-        Long pendingPlanId = queryLong("""
-                SELECT id FROM ai_plan WHERE user_id = ? AND status = 'PENDING_REVIEW'
-                ORDER BY cycle_start_date DESC, id DESC LIMIT 1
-                """, userId);
-        if (pendingPlanId != null) {
-            upsertReminder(userId, "PLAN_REVIEW", "PLAN_REVIEW_" + pendingPlanId, "PLAN", "plan",
-                    "有一份 AI 周计划等待审核",
-                    "AI 生成的计划不会自动应用。请进入周计划页确认后再应用。",
-                    now.plusMinutes(30));
+        // --- 运动进度 ---
+        try {
+            int weeklyTarget = intValue(goal.get("weeklyExerciseMinutes"), 150);
+            int elapsedDays = Math.max(1, today.getDayOfWeek().getValue());
+            int expectedMinutes = (int) Math.ceil(weeklyTarget * elapsedDays / 7.0);
+            int exerciseMinutes = intValue(queryScalar("""
+                    SELECT COALESCE(SUM(duration_min), 0) FROM daily_checkin
+                    WHERE user_id = ? AND checkin_type = 'EXERCISE' AND record_date BETWEEN ? AND ?
+                    """, userId, Date.valueOf(weekStart), Date.valueOf(today)), 0);
+            if (exerciseMinutes < expectedMinutes) {
+                upsertReminder(userId, "EXERCISE", "EXERCISE_" + weekStart, "TODAY", "checkin",
+                        "本周运动进度偏慢",
+                        "当前已记录 " + exerciseMinutes + " 分钟，按你的目标本周此时建议达到约 " + expectedMinutes + " 分钟。",
+                        now.plusHours(5));
+            }
+        } catch (Exception e) {
+            log.error("ensureReminders EXERCISE failed for userId={}", userId, e);
+        }
+
+        // --- 周计划待执行项 ---
+        try {
+            Long approvedPlanId = queryLong("""
+                    SELECT id FROM ai_plan WHERE user_id = ? AND COALESCE(status, 'APPROVED') = 'APPROVED'
+                    ORDER BY cycle_start_date DESC, id DESC LIMIT 1
+                    """, userId);
+            if (approvedPlanId != null) {
+                int pendingItems = intValue(queryScalar("""
+                        SELECT COUNT(*) FROM plan_item i
+                        JOIN plan_day d ON d.id = i.plan_day_id
+                        LEFT JOIN plan_execution e ON e.plan_item_id = i.id AND e.user_id = ?
+                        WHERE i.plan_id = ? AND d.plan_date <= ? AND COALESCE(e.status, 'PENDING') = 'PENDING'
+                        """, userId, approvedPlanId, Date.valueOf(today)), 0);
+                if (pendingItems > 0) {
+                    upsertReminder(userId, "PLAN", "PLAN_PENDING_" + approvedPlanId + "_" + today, "PLAN", "plan",
+                            "周计划有 " + pendingItems + " 项待执行",
+                            "这条提醒来自已应用周计划。完成、跳过或调整状态后，进度会同步更新。",
+                            now.plusHours(1));
+                }
+            }
+        } catch (Exception e) {
+            log.error("ensureReminders PLAN_PENDING failed for userId={}", userId, e);
+        }
+
+        // --- 待审核计划 ---
+        try {
+            Long pendingPlanId = queryLong("""
+                    SELECT id FROM ai_plan WHERE user_id = ? AND status = 'PENDING_REVIEW'
+                    ORDER BY cycle_start_date DESC, id DESC LIMIT 1
+                    """, userId);
+            if (pendingPlanId != null) {
+                upsertReminder(userId, "PLAN_REVIEW", "PLAN_REVIEW_" + pendingPlanId, "PLAN", "plan",
+                        "有一份 AI 周计划等待审核",
+                        "AI 生成的计划不会自动应用。请进入周计划页确认后再应用。",
+                        now.plusMinutes(30));
+            } else {
+                // 没有待审核计划时，清理旧 PLAN_REVIEW 提醒
+                jdbcTemplate.update("""
+                        UPDATE user_reminder SET is_done = 1
+                        WHERE user_id = ? AND reminder_type = 'PLAN_REVIEW' AND is_done = 0
+                        """, userId);
+            }
+        } catch (Exception e) {
+            log.error("ensureReminders PLAN_REVIEW failed for userId={}", userId, e);
+        }
+
+        // --- 习惯建议 (RISK) ---
+        refreshRiskReminders(userId, today, weekStart, now, goal);
+    }
+
+    private void refreshRiskReminders(Long userId, LocalDate today, LocalDate weekStart,
+                                      LocalDateTime now, Map<String, Object> goal) {
+        // 饮水习惯：7天内饮水达标（>=目标）的天数 < 3
+        try {
+            int waterTarget = intValue(goal.get("dailyWaterMl"), 2000);
+            int waterOkDays = intValue(queryScalar("""
+                    SELECT COUNT(*) FROM (
+                      SELECT record_date, COALESCE(SUM(water_cups), 0) * 250 AS total
+                      FROM daily_checkin WHERE user_id = ? AND checkin_type = 'WATER'
+                        AND record_date >= ?
+                      GROUP BY record_date HAVING total >= ?
+                    ) t
+                    """, userId, Date.valueOf(today.minusDays(6)), waterTarget), 0);
+            if (waterOkDays < 3) {
+                upsertReminder(userId, "RISK_WATER", "RISK_WATER_" + weekStart, "RISK", "dashboard",
+                        "饮水习惯待养成",
+                        "最近7天仅 " + waterOkDays + " 天达到饮水目标（" + waterTarget + " ml）。建议每天分早中晚三段完成。",
+                        now.plusHours(6));
+            }
+        } catch (Exception e) {
+            log.error("refreshRiskReminders WATER failed for userId={}", userId, e);
+        }
+
+        // 运动规律：7天内运动天数 < 2
+        try {
+            int exerciseDays = intValue(queryScalar("""
+                    SELECT COUNT(DISTINCT record_date) FROM daily_checkin
+                    WHERE user_id = ? AND checkin_type = 'EXERCISE' AND record_date >= ?
+                    """, userId, Date.valueOf(today.minusDays(6))), 0);
+            if (exerciseDays < 2) {
+                upsertReminder(userId, "RISK_EXERCISE", "RISK_EXERCISE_" + weekStart, "RISK", "dashboard",
+                        "运动规律性不足",
+                        "最近7天仅运动 " + exerciseDays + " 天，建议每周至少安排2-3次，哪怕20分钟快走也有帮助。",
+                        now.plusHours(6));
+            }
+        } catch (Exception e) {
+            log.error("refreshRiskReminders EXERCISE failed for userId={}", userId, e);
+        }
+
+        // 饮食结构：7天内平均评分 < 50
+        try {
+            Double avgMealScore = (Double) queryScalar("""
+                    SELECT AVG(health_score) FROM daily_checkin
+                    WHERE user_id = ? AND checkin_type = 'MEAL' AND record_date >= ?
+                    """, userId, Date.valueOf(today.minusDays(6)));
+            if (avgMealScore != null && avgMealScore < 50) {
+                upsertReminder(userId, "RISK_MEAL", "RISK_MEAL_" + weekStart, "RISK", "dashboard",
+                        "饮食结构可优化",
+                        "最近7天饮食评分均值 " + Math.round(avgMealScore) + " 分。建议适当增加蛋白质和蔬菜占比。",
+                        now.plusHours(6));
+            }
+        } catch (Exception e) {
+            log.error("refreshRiskReminders MEAL failed for userId={}", userId, e);
+        }
+
+        // 打卡质量：连续打卡 >= 5 天但饮水或运动某天为 0
+        try {
+            int streak = intValue(queryScalar("""
+                    SELECT COUNT(DISTINCT record_date) FROM daily_checkin
+                    WHERE user_id = ? AND record_date >= ?
+                    """, userId, Date.valueOf(today.minusDays(6))), 0);
+            if (streak >= 5) {
+                int waterZeroDays = intValue(queryScalar("""
+                        SELECT COUNT(*) FROM (
+                          SELECT record_date FROM daily_checkin
+                          WHERE user_id = ? AND record_date >= ?
+                          GROUP BY record_date HAVING COALESCE(SUM(water_cups), 0) = 0
+                        ) t
+                        """, userId, Date.valueOf(today.minusDays(6))), 0);
+                int exerciseZeroDays = intValue(queryScalar("""
+                        SELECT COUNT(*) FROM (
+                          SELECT record_date FROM daily_checkin
+                          WHERE user_id = ? AND checkin_type = 'EXERCISE' AND record_date >= ?
+                        ) t2
+                        """, userId, Date.valueOf(today.minusDays(6))), 0);
+                if (waterZeroDays >= 3 || exerciseZeroDays >= 5) {
+                    upsertReminder(userId, "RISK_CHECKIN_QUALITY", "RISK_CHECKIN_QUALITY_" + weekStart, "RISK", "dashboard",
+                            "打卡连续但质量可提升",
+                            "最近" + streak + "天连续打卡，但饮水或运动覆盖不足，建议在打卡中增加实际行为记录。",
+                            now.plusHours(6));
+                }
+            }
+        } catch (Exception e) {
+            log.error("refreshRiskReminders CHECKIN_QUALITY failed for userId={}", userId, e);
+        }
+
+        // 体重缺口：有历史体重但连续3周未记录
+        try {
+            Long anyWeight = queryLong("""
+                    SELECT COUNT(*) FROM weight_record WHERE user_id = ?
+                    """, userId);
+            if (anyWeight != null && anyWeight > 0) {
+                int missingWeeks = 0;
+                for (int i = 0; i < 3; i++) {
+                    LocalDate ws = weekStart.minusWeeks(i);
+                    int c = intValue(queryScalar("""
+                            SELECT COUNT(*) FROM weight_record
+                            WHERE user_id = ? AND record_date BETWEEN ? AND ?
+                            """, userId, Date.valueOf(ws), Date.valueOf(ws.plusDays(6))), 0);
+                    if (c == 0) missingWeeks++;
+                }
+                if (missingWeeks >= 3) {
+                    upsertReminder(userId, "RISK_WEIGHT_GAP", "RISK_WEIGHT_GAP_" + weekStart, "RISK", "dashboard",
+                            "体重记录有缺口",
+                            "最近3周均未记录体重。系统允许补录前两周数据，补齐后趋势分析更准确。",
+                            now.plusHours(6));
+                }
+            }
+        } catch (Exception e) {
+            log.error("refreshRiskReminders WEIGHT_GAP failed for userId={}", userId, e);
         }
     }
 
@@ -1671,7 +1835,7 @@ public class WellnessFeatureService {
         if (estimate.calories() >= 900 || estimate.fat() >= 35) {
             return "这餐热量或脂肪偏高，建议减少油炸和酱料，增加蔬菜体积。";
         }
-        return "估算结果来自本地营养规则库，可输入“鸡胸肉150g 米饭200g”得到更准结果。";
+        return "估算结果来自本地营养规则库，可输入'鸡胸肉150g 米饭200g'得到更准结果。";
     }
 
     private BigDecimal decimal(double value) {
