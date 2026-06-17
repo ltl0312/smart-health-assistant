@@ -59,7 +59,7 @@
         <h4 class="font-bold mb-4 text-red-500">危险操作</h4>
         <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">退出后需要重新登录才能访问您的健康数据。</p>
         <div class="flex gap-3">
-          <button @click="$emit('logout')" class="px-6 py-2.5 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-xl text-sm font-bold hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors border border-red-200 dark:border-red-800">退出登录</button>
+          <button @click="handleLogout" class="px-6 py-2.5 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-xl text-sm font-bold hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors border border-red-200 dark:border-red-800">退出登录</button>
           <button @click="deleteAccount" :disabled="deleting" class="px-6 py-2.5 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 transition-colors disabled:opacity-50">{{ deleting ? '注销中...' : '注销账户' }}</button>
         </div>
       </div>
@@ -69,14 +69,20 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
 import request from '@/api/request'
 
-const emit = defineEmits(['logout'])
+const router = useRouter()
 const userStore = useUserStore()
 const themeStore = useThemeStore()
+
+function handleLogout() {
+  userStore.logout()
+  router.push('/')
+}
 const profile = ref({})
 const avatarPreview = ref('')
 const initial = ref('?')
@@ -118,6 +124,6 @@ function toggleDark() {
 async function deleteAccount() {
   if (!confirm('确定注销账户？注销后无法登录。')) return
   deleting.value = true
-  try { await request.delete('/user/account'); emit('logout') } catch (e) { alert(e.message) } finally { deleting.value = false }
+  try { await request.delete('/user/account'); handleLogout() } catch (e) { alert(e.message) } finally { deleting.value = false }
 }
 </script>

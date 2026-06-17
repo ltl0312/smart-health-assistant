@@ -1,34 +1,36 @@
 # ============================================================
-# 智能健康助手 — Docker Compose 编排配置 (开发版)
+# 智能健康助手 — 部署版 Docker Compose（给队友用）
 # ============================================================
-# 启动:  docker compose up -d --build
-# 分发:  将镜像推到阿里云后，队友用 docker-compose.deploy.yml
+# 前提：你只需要 3 个文件
+#   - docker-compose.deploy.yml  (本文件)
+#   - .env                        (你已发给队友)
+#   - init.sql                    (你已发给队友)
+#
+# 队友操作步骤：
+#   1. 把 3 个文件放同一目录
+#   2. 修改 .env 填入真实值
+#   3. docker compose -f docker-compose.deploy.yml up -d
 # ============================================================
 #
 # 服务架构:
-#   ┌────────────┐
-#   │   Nginx:80 │── 前端 SPA 静态文件
-#   │   Java:8080│── Spring Boot REST API
-#   │  (app 容器) │    单体镜像，入口 docker/entrypoint.sh
-#   └─────┬──────┘
-#         │ 依赖
-#   ┌─────┴──────┐
-#   │   MySQL:8  │── 持久化数据
-#   │   Redis:7  │── 缓存 & 排行榜
-#   └────────────┘
-#
-# 环境变量优先级: .env 文件 > shell 环境变量 > compose 默认值
-# 复制 .env.example → .env 后填入真实值
+#   ┌─────────────────┐
+#   │   app (阿里云镜像) │  Nginx :80  +  Java :8080
+#   └────────┬────────┘
+#            │ 依赖
+#   ┌────────┴────────┐
+#   │   MySQL:8       │  持久化数据
+#   │   Redis:7       │  缓存 & 排行榜
+#   └─────────────────┘
 # ============================================================
 
 services:
   # =========================================================
-  # 主应用 — 前端 (Nginx) + 后端 (Spring Boot) 单体容器
+  # 主应用（从阿里云镜像仓库拉取，无需源码）
   # =========================================================
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # ⚠️ 队友只需改这一行：替换为你的阿里云镜像地址
+    #    格式: registry.cn-hangzhou.aliyuncs.com/命名空间/仓库名:标签
+    image: ${IMAGE_NAME:-smart-health-assistant-app:latest}
     container_name: smart-health-app
     restart: unless-stopped
     ports:
@@ -66,11 +68,10 @@ services:
       UPLOAD_AVATAR_MAX_SIZE: "${UPLOAD_AVATAR_MAX_SIZE:-5242880}"
       UPLOAD_AVATAR_PATH: "/app/uploads/avatars/"
 
-      # ---- MyBatis 日志（生产环境建议设为空或关闭） ----
+      # ---- MyBatis 日志 ----
       MYBATIS_LOG_IMPL: "${MYBATIS_LOG_IMPL:-org.apache.ibatis.logging.stdout.StdOutImpl}"
 
     volumes:
-      # 头像上传持久化
       - uploads-data:/app/uploads
 
     depends_on:
@@ -81,13 +82,6 @@ services:
 
     networks:
       - app-network
-
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 90s
 
   # =========================================================
   # MySQL 8.x 数据库
@@ -102,12 +96,11 @@ services:
       MYSQL_CHARSET: utf8mb4
       MYSQL_COLLATION: utf8mb4_unicode_ci
     ports:
-      # 映射到非标准端口避免宿主机端口冲突
       - "${MYSQL_PORT:-3307}:3306"
     volumes:
       - mysql-data:/var/lib/mysql
-      # 首次启动自动建表
-      - ./health-assistant-backend/src/main/resources/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      # ✅ 修复：队友只需要把 init.sql 放在同一目录下
+      - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
       interval: 10s
@@ -137,9 +130,6 @@ services:
     networks:
       - app-network
 
-# ===========================================================
-# 持久化卷
-# ===========================================================
 volumes:
   mysql-data:
     driver: local
@@ -148,9 +138,6 @@ volumes:
   uploads-data:
     driver: local
 
-# ===========================================================
-# 网络
-# ===========================================================
 networks:
   app-network:
     driver: bridge

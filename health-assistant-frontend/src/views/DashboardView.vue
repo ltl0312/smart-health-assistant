@@ -146,8 +146,11 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import request from '@/api/request'
+
+const router = useRouter()
 import { featureApi } from '@/api/features'
 import WeightSparkline from '@/components/WeightSparkline.vue'
 import AiChatDialog from '@/components/AiChatDialog.vue'
@@ -258,8 +261,7 @@ function formatShort(value) {
 }
 
 function go(view) {
-  localStorage.setItem('activeView', view)
-  window.location.reload()
+  router.push('/' + view)
 }
 
 function localDate(date) {

@@ -1,5 +1,5 @@
 <template>
-  <!-- Login Gate -->
+  <!-- 登录守卫 -->
   <div v-if="!isLoggedIn" class="min-h-screen bg-background-light dark:bg-background-dark px-4 py-8 transition-colors">
     <div class="mx-auto grid min-h-[calc(100vh-4rem)] w-full max-w-6xl grid-cols-1 items-center gap-8 lg:grid-cols-[1.08fr_0.92fr]">
       <section class="hidden lg:block">
@@ -64,54 +64,57 @@
     </div>
   </div>
 
-  <!-- Main SPA -->
+  <!-- 主 SPA 外壳 -->
   <div v-else class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-sans selection:bg-green-500/30 pb-20 transition-colors duration-300 min-h-screen">
+    <!-- 顶部导航栏 -->
     <nav class="fixed top-0 w-full bg-white/80 dark:bg-[#0a0a0a]/80 backdrop-blur-xl z-40 border-b border-slate-100 dark:border-slate-800 transition-colors duration-300">
       <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-        <div class="flex items-center gap-2 font-bold tracking-tight text-lg"><span class="text-green-500 text-xl">✦</span> SmartHealth</div>
+        <router-link to="/dashboard" class="flex items-center gap-2 font-bold tracking-tight text-lg hover:opacity-80 transition-opacity">
+          <span class="text-green-500 text-xl">✦</span> SmartHealth
+        </router-link>
         <div class="hidden md:flex items-center gap-8 h-full relative">
-          <button v-for="tab in tabs" :key="tab.id" @click="switchTo(tab.id)" class="relative h-full flex items-center text-sm transition-colors" :class="activeView === tab.id ? 'text-green-500 font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-green-500'">{{ tab.label }}</button>
+          <router-link
+            v-for="tab in tabs"
+            :key="tab.id"
+            :to="'/' + tab.id"
+            class="relative h-full flex items-center text-sm transition-colors"
+            active-class="text-green-500 font-bold"
+            :class="$route.path === '/' + tab.id ? 'text-green-500 font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-green-500'"
+          >{{ tab.label }}</router-link>
         </div>
-        <button @click="switchTo('settings')" class="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 font-medium hover:ring-2 hover:ring-green-500/50 transition-all overflow-hidden">
+        <router-link to="/settings" class="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 font-medium hover:ring-2 hover:ring-green-500/50 transition-all overflow-hidden">
           <img v-if="avatarUrl" :src="avatarUrl" class="w-full h-full rounded-full object-cover" /><span v-else>{{ initial }}</span>
-        </button>
+        </router-link>
       </div>
     </nav>
+
+    <!-- 路由出口 -->
     <main class="pt-28 max-w-7xl mx-auto px-6">
-      <component :is="currentView" @logout="handleLogout" />
+      <router-view @logout="handleLogout" />
     </main>
+
+    <!-- 新用户引导 -->
     <OnboardingModal v-if="showOnboarding" @done="showOnboarding=false" />
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
 import request from '@/api/request'
-import DashboardView from '@/views/DashboardView.vue'
-import PlanView from '@/views/PlanView.vue'
-import CheckinView from '@/views/CheckinView.vue'
-import ProfileView from '@/views/ProfileView.vue'
-import ReportView from '@/views/ReportView.vue'
-import NotificationView from '@/views/NotificationView.vue'
-import KnowledgeView from '@/views/KnowledgeView.vue'
-import RankView from '@/views/RankView.vue'
-import SettingsView from '@/views/SettingsView.vue'
-import AdminView from '@/views/AdminView.vue'
 import OnboardingModal from '@/components/OnboardingModal.vue'
 
+const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const themeStore = useThemeStore()
+
 const isLoggedIn = computed(() => userStore.isLoggedIn)
-const activeView = ref(localStorage.getItem('activeView') || 'dashboard')
 const showOnboarding = ref(false)
 const isAdmin = computed(() => userStore.userInfo?.role === 'ADMIN')
-const viewMap = { dashboard: DashboardView, plan: PlanView, checkin: CheckinView, report: ReportView, notifications: NotificationView, profile: ProfileView, knowledge: KnowledgeView, rank: RankView, settings: SettingsView, admin: AdminView }
-const currentView = computed(() => {
-  if (activeView.value === 'admin' && !isAdmin.value) return DashboardView
-  return viewMap[activeView.value] || DashboardView
-})
+
 const tabs = computed(() => {
   const baseTabs = [
     { id: 'dashboard', label: '今日看板' },
@@ -124,10 +127,11 @@ const tabs = computed(() => {
   ]
   return isAdmin.value ? [...baseTabs, { id: 'admin', label: '管理后台' }] : baseTabs
 })
+
 const avatarUrl = ref('')
 const initial = computed(() => (userStore.userInfo?.nickname || userStore.userInfo?.username || '?')[0].toUpperCase())
 
-// Login
+// 登录表单
 const isRegister = ref(false)
 const loginForm = reactive({ username: '', password: '', email: '' })
 const loginLoading = ref(false)
@@ -153,17 +157,51 @@ async function loadAvatar() {
 async function handleLogin() {
   loginError.value = ''; loginLoading.value = true
   try {
-    if (isRegister.value) { await userStore.register(loginForm.username, loginForm.password, loginForm.email); await userStore.login(loginForm.username, loginForm.password); showOnboarding.value = true }
-    else { const r = await userStore.login(loginForm.username, loginForm.password); if (!r.hasProfile) showOnboarding.value = true }
+    if (isRegister.value) {
+      await userStore.register(loginForm.username, loginForm.password, loginForm.email)
+      await userStore.login(loginForm.username, loginForm.password)
+      showOnboarding.value = true
+    } else {
+      const r = await userStore.login(loginForm.username, loginForm.password)
+      if (!r.hasProfile) showOnboarding.value = true
+    }
     await loadAvatar()
-    // 跟随用户上次保存的主题偏好，没有记录则默认深色
-    const savedDark = localStorage.getItem('darkMode')
     themeStore.applyTheme()
-  } catch (e) { loginError.value = e.message || '操作失败' } finally { loginLoading.value = false }
+
+    // 登录成功后跳转到之前保存的路由或默认仪表盘
+    const saved = localStorage.getItem('lastRoute')
+    if (saved && saved !== '/login' && saved !== '/') {
+      router.push(saved)
+    } else {
+      router.push('/dashboard')
+    }
+  } catch (e) {
+    loginError.value = e.message || '操作失败'
+  } finally {
+    loginLoading.value = false
+  }
 }
 
-onMounted(() => { if (isLoggedIn.value) loadAvatar() })
-watch(activeView, v => localStorage.setItem('activeView', v))
-function switchTo(view) { if (activeView.value !== view) activeView.value = view }
-function handleLogout() { userStore.logout(); localStorage.removeItem('activeView') }
+function handleLogout() {
+  userStore.logout()
+  router.push('/')
+}
+
+// 持久化当前路由路径
+watch(() => route.path, (path) => {
+  if (path && path !== '/') {
+    localStorage.setItem('lastRoute', path)
+  }
+})
+
+onMounted(() => {
+  if (isLoggedIn.value) {
+    loadAvatar()
+    // 恢复上次访问的路由
+    const saved = localStorage.getItem('lastRoute')
+    if (saved && saved !== route.path && saved !== '/' && saved !== '/login') {
+      router.push(saved)
+    }
+  }
+})
 </script>

@@ -28,6 +28,7 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+// 健康管理综合服务（目标/报告/营养估算/运动估算/预警/提醒/计划管理/计划日历/回顾/文章/管理员/模板）
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -39,6 +40,9 @@ public class WellnessFeatureService {
     private final DeepSeekConfig deepSeekConfig;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    // ---- 目标管理 ----
+
+    /** 获取用户活跃目标，无则返回 DRAFT 默认值 */
     public Map<String, Object> getGoal(Long userId) {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
                 SELECT id, user_id, goal_type, target_weight, daily_water_ml, weekly_exercise_times,
@@ -63,6 +67,7 @@ public class WellnessFeatureService {
         return goal;
     }
 
+    /** 保存/更新目标，有 id 则 UPDATE，无 id 则 INSERT */
     @Transactional
     public Map<String, Object> saveGoal(Long userId, Map<String, Object> request) {
         Long id = longValue(request.get("id"));
@@ -101,6 +106,9 @@ public class WellnessFeatureService {
         return getGoal(userId);
     }
 
+    // ---- 健康报告 ----
+
+    /** 聚合 7/30/90 天健康数据：体重、饮水、运动、饮食评分 */
     public Map<String, Object> reportSummary(Long userId, int days) {
         int safeDays = List.of(7, 30, 90).contains(days) ? days : 30;
         LocalDate start = LocalDate.now().minusDays(safeDays - 1L);
@@ -158,6 +166,9 @@ public class WellnessFeatureService {
         return result;
     }
 
+    // ---- 食物营养估算 ----
+
+    /** 基于 23+ 食物规则库关键词匹配估算营养 */
     @Transactional
     public Map<String, Object> estimateMeal(Long userId, Map<String, Object> request) {
         String foodName = stringValue(request.get("foodName"), stringValue(request.get("food_name"), "均衡餐"));
@@ -202,6 +213,9 @@ public class WellnessFeatureService {
         return result;
     }
 
+    // ---- 运动消耗估算 ----
+
+    /** MET 公式估算消耗：MET × 3.5 × 体重(kg) / 200 × 时长(min) */
     @Transactional
     public Map<String, Object> estimateExercise(Long userId, Map<String, Object> request) {
         String exerciseType = stringValue(request.get("exerciseType"), stringValue(request.get("exercise_type"), "walking"));
@@ -246,6 +260,9 @@ public class WellnessFeatureService {
         return result;
     }
 
+    // ---- 健康预警 ----
+
+    /** 获取未读预警（最多 30 条） */
     @Transactional
     public List<Map<String, Object>> alerts(Long userId) {
         refreshAlerts(userId);
@@ -260,6 +277,9 @@ public class WellnessFeatureService {
         jdbcTemplate.update("UPDATE health_alert SET is_read = 1, read_at = NOW() WHERE id = ? AND user_id = ?", id, userId);
     }
 
+    // ---- 用户提醒 ----
+
+    /** 获取未完成提醒（最多 20 条） */
     @Transactional
     public List<Map<String, Object>> reminders(Long userId) {
         ensureReminders(userId);
@@ -272,11 +292,12 @@ public class WellnessFeatureService {
 
     @Transactional
     public void markReminderDone(Long userId, Long id) {
-        jdbcTemplate.update("""
-                UPDATE user_reminder SET is_done = 1 WHERE id = ? AND user_id = ?
-                """, id, userId);
+        jdbcTemplate.update("UPDATE user_reminder SET is_done = 1 WHERE id = ? AND user_id = ?", id, userId);
     }
 
+    // ---- 计划管理 ----
+
+    /** 获取最新已批准计划，无则创建本地回退计划 */
     @Transactional
     public Map<String, Object> latestPlan(Long userId) {
         Long planId = queryLong("""
@@ -291,6 +312,7 @@ public class WellnessFeatureService {
         return plan(userId, planId);
     }
 
+    /** 获取待审核计划 */
     @Transactional
     public Map<String, Object> pendingPlan(Long userId) {
         Long planId = queryLong("""
@@ -305,6 +327,7 @@ public class WellnessFeatureService {
         return plan(userId, planId);
     }
 
+    /** 批准计划：设为 APPROVED，同时拒绝同周期其他计划 */
     @Transactional
     public Map<String, Object> approvePlan(Long userId, Long planId) {
         LocalDate cycleStart = queryDate("SELECT cycle_start_date FROM ai_plan WHERE id = ? AND user_id = ?", planId, userId);
@@ -322,6 +345,7 @@ public class WellnessFeatureService {
         return plan(userId, planId);
     }
 
+    /** 拒绝待审核计划 */
     @Transactional
     public void rejectPlan(Long userId, Long planId) {
         int updated = jdbcTemplate.update("""
@@ -332,6 +356,7 @@ public class WellnessFeatureService {
         }
     }
 
+    /** 获取计划详情（含日历、进度、摘要） */
     public Map<String, Object> plan(Long userId, Long planId) {
         ensurePlanCalendar(userId, planId);
         Map<String, Object> plan = normalize(queryOne("""
@@ -348,6 +373,7 @@ public class WellnessFeatureService {
         return plan;
     }
 
+    /** 最近 20 条计划历史（含进度和摘要） */
     @Transactional
     public List<Map<String, Object>> planHistory(Long userId) {
         List<Map<String, Object>> rows = normalizeList(jdbcTemplate.queryForList("""
@@ -379,6 +405,7 @@ public class WellnessFeatureService {
         return rows;
     }
 
+    /** 导出计划为 Markdown */
     @Transactional
     public String exportPlanMarkdown(Long userId, Long planId) {
         Map<String, Object> plan = plan(userId, planId);
@@ -409,6 +436,9 @@ public class WellnessFeatureService {
         return md.toString();
     }
 
+    // ---- 计划日历 ----
+
+    /** 7 天日历（含条目和执行状态） */
     @Transactional
     public List<Map<String, Object>> planCalendar(Long userId, Long planId) {
         ensurePlanCalendar(userId, planId);
@@ -430,6 +460,7 @@ public class WellnessFeatureService {
         return days;
     }
 
+    /** 计划条目打卡（PENDING/DONE/SKIPPED），UPSERT 实现 */
     @Transactional
     public Map<String, Object> checkinPlanItem(Long userId, Long planId, Long itemId, Map<String, Object> request) {
         String status = stringValue(request.get("status"), "DONE").toUpperCase(Locale.ROOT);
@@ -451,6 +482,7 @@ public class WellnessFeatureService {
         return planProgress(userId, planId);
     }
 
+    /** 计划进度：完成率 + 连续执行天数 */
     public Map<String, Object> planProgress(Long userId, Long planId) {
         int total = intValue(queryScalar("SELECT COUNT(*) FROM plan_item WHERE plan_id = ? AND user_id = ?", planId, userId), 0);
         int done = intValue(queryScalar("""
@@ -502,6 +534,9 @@ public class WellnessFeatureService {
         return summary;
     }
 
+    // ---- 每周回顾 ----
+
+    /** 获取或生成指定周的回顾 */
     public Map<String, Object> weeklyReview(Long userId, String week) {
         String weekCode = week == null || week.isBlank() ? currentWeekCode() : week;
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
@@ -514,6 +549,7 @@ public class WellnessFeatureService {
         return generateWeeklyReview(userId, weekCode);
     }
 
+    /** 生成周回顾：基于 7 天报告和预警数据 */
     @Transactional
     public Map<String, Object> generateWeeklyReview(Long userId, String week) {
         String weekCode = week == null || week.isBlank() ? currentWeekCode() : week;
@@ -536,6 +572,7 @@ public class WellnessFeatureService {
         return weeklyReview(userId, weekCode);
     }
 
+    /** 生成可打印 HTML 报告 */
     public String printableReportHtml(Long userId, int days) {
         Map<String, Object> report = reportSummary(userId, days);
         Map<String, Object> profile = getProfile(userId);
@@ -572,6 +609,9 @@ public class WellnessFeatureService {
         );
     }
 
+    // ---- 文章管理 ----
+
+    /** 文章列表：按分类筛选 + 按用户目标个性化排序 */
     public List<Map<String, Object>> articles(Long userId, String category) {
         String goal = stringValue(getGoal(userId).get("goalType"), null);
         List<Object> args = new ArrayList<>();
@@ -594,6 +634,7 @@ public class WellnessFeatureService {
         return normalizeList(jdbcTemplate.queryForList(sql.toString(), args.toArray()));
     }
 
+    /** 文章详情：浏览量 +1，记录浏览日志 */
     @Transactional
     public Map<String, Object> article(Long userId, Long id) {
         int updated = jdbcTemplate.update("""
@@ -615,6 +656,9 @@ public class WellnessFeatureService {
         return article;
     }
 
+    // ---- 管理员功能 ----
+
+    /** 管理员仪表盘统计 */
     public Map<String, Object> adminDashboard() {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("totalUsers", queryScalar("SELECT COUNT(*) FROM sys_user"));
@@ -630,6 +674,7 @@ public class WellnessFeatureService {
         return result;
     }
 
+    /** 用户列表：支持关键词搜索（用户名/邮箱/昵称） */
     public List<Map<String, Object>> adminUsers(String keyword) {
         if (keyword == null || keyword.isBlank()) {
             return normalizeList(jdbcTemplate.queryForList("""
@@ -645,6 +690,7 @@ public class WellnessFeatureService {
                 """, like, like, like));
     }
 
+    /** 文章管理列表：状态筛选 + 关键词搜索 */
     public List<Map<String, Object>> adminArticles(String keyword, String status) {
         List<Object> args = new ArrayList<>();
         StringBuilder sql = new StringBuilder("""
@@ -673,6 +719,7 @@ public class WellnessFeatureService {
                 """, id));
     }
 
+    /** 封禁/解封用户，不能禁用自己 */
     public void updateUserStatus(Long adminId, Long id, Map<String, Object> request) {
         if (Objects.equals(adminId, id)) {
             throw new BusinessException(400, "不能禁用当前登录的管理员账号");
@@ -681,6 +728,7 @@ public class WellnessFeatureService {
         jdbcTemplate.update("UPDATE sys_user SET status = ? WHERE id = ?", status, id);
     }
 
+    /** AI 服务状态：配置信息 + 最近调用日志 */
     public Map<String, Object> aiStatus() {
         Map<String, Object> result = new LinkedHashMap<>();
         boolean configured = deepSeekConfig.getApiKey() != null && !deepSeekConfig.getApiKey().isBlank()
@@ -695,6 +743,7 @@ public class WellnessFeatureService {
         return result;
     }
 
+    /** 创建/更新文章 */
     @Transactional
     public Map<String, Object> saveArticle(Long adminId, Long id, Map<String, Object> request) {
         String category = stringValue(request.get("categoryCode"), "DIET");
@@ -731,9 +780,12 @@ public class WellnessFeatureService {
         return normalize(queryOne("SELECT * FROM health_article WHERE id = ?", id));
     }
 
+    /** 软删除文章（设为 OFFLINE） */
     public void deleteArticle(Long id) {
         jdbcTemplate.update("UPDATE health_article SET status = 'OFFLINE' WHERE id = ?", id);
     }
+
+    // ---- 私有辅助：数据获取 ----
 
     private Map<String, Object> getProfile(Long userId) {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
@@ -788,6 +840,9 @@ public class WellnessFeatureService {
                 """, userId, Date.valueOf(start)), 0);
     }
 
+    // ---- 私有辅助：预警刷新 ----
+
+    /** 检测 BMI、体重波动、打卡频率、饮水、运动 5 类异常 */
     private void refreshAlerts(Long userId) {
         Map<String, Object> report = reportSummary(userId, 7);
         BigDecimal bmi = decimalValue(report.get("latestBmi"), null);
@@ -811,6 +866,7 @@ public class WellnessFeatureService {
         }
     }
 
+    /** UPSERT 预警（按 alert_key 去重） */
     private void upsertAlert(Long userId, String type, String title, String message, String severity, String key) {
         jdbcTemplate.update("""
                 INSERT INTO health_alert(user_id, alert_type, title, message, severity, alert_key)
@@ -819,7 +875,9 @@ public class WellnessFeatureService {
                 """, userId, type, title, message, severity, key);
     }
 
+    /** 刷新 8 类提醒：饮水/打卡/体重/回填/运动进度/计划项/审核/风险习惯 */
     private void ensureReminders(Long userId) {
+        // 清理旧的无 key 提醒
         jdbcTemplate.update("""
                 UPDATE user_reminder SET is_done = 1
                 WHERE user_id = ? AND reminder_key IS NULL AND is_done = 0
@@ -970,6 +1028,7 @@ public class WellnessFeatureService {
         refreshRiskReminders(userId, today, weekStart, now, goal);
     }
 
+    /** 风险习惯提醒：饮水/运动/饮食评分/打卡质量/体重缺口 */
     private void refreshRiskReminders(Long userId, LocalDate today, LocalDate weekStart,
                                       LocalDateTime now, Map<String, Object> goal) {
         // 饮水习惯：7天内饮水达标（>=目标）的天数 < 3
@@ -1083,6 +1142,7 @@ public class WellnessFeatureService {
         }
     }
 
+    /** UPSERT 提醒（按 reminder_key 去重） */
     private void upsertReminder(Long userId, String type, String key, String groupType, String actionView,
                                 String title, String message, LocalDateTime dueAt) {
         jdbcTemplate.update("""
@@ -1106,6 +1166,9 @@ public class WellnessFeatureService {
         };
     }
 
+    // ---- 私有辅助：计划日历构建 ----
+
+    /** AI 不可用时创建本地回退计划 */
     private Long createFallbackPlan(Long userId, LocalDate start, String status) {
         LocalDate weekStart = monday(start == null ? LocalDate.now(APP_ZONE) : start);
         String goalType = stringValue(getGoal(userId).get("goalType"), "MAINTENANCE");
@@ -1129,6 +1192,7 @@ public class WellnessFeatureService {
         return Objects.requireNonNull(keyHolder.getKey()).longValue();
     }
 
+    /** 解析 AI JSON → 7 天 × N 条目日历，写入 plan_day/plan_item */
     private void ensurePlanCalendar(Long userId, Long planId) {
         Map<String, Object> planRow = normalize(queryOne("""
                 SELECT cycle_start_date, diet_plan_json, workout_plan_json
@@ -1242,6 +1306,7 @@ public class WellnessFeatureService {
                 """, dayId, planId, userId, type, mealType, title, description, calories, duration, intensity, order);
     }
 
+    /** 混合 AI 输出与本地模板：AI 有则覆盖，无则回退 */
     private List<PlanDayTemplate> buildPlanTemplates(Long userId, Long planId, LocalDate weekStart,
                                                      String dietJson, String workoutJson) {
         String goalType = stringValue(getGoal(userId).get("goalType"), "MAINTENANCE");
@@ -1280,6 +1345,7 @@ public class WellnessFeatureService {
         return MEAL_TYPES.stream().map(byType::get).filter(Objects::nonNull).toList();
     }
 
+    /** 解析饮食 JSON：支持 days[] 数组和 day1~day7 键名两种格式 */
     private List<PlanDayTemplate> parseDietPlan(String json) {
         JsonNode root = readJson(json);
         if (root == null || root.isMissingNode() || root.isNull()) {
@@ -1329,18 +1395,15 @@ public class WellnessFeatureService {
         return meals;
     }
 
+    /** 解析运动 JSON：支持 weekly_schedule / schedule / items 三种键名 */
     private List<WorkoutTemplate> parseWorkoutPlan(String json) {
         JsonNode root = readJson(json);
         if (root == null || root.isMissingNode() || root.isNull()) {
             return List.of();
         }
         JsonNode schedule = root.get("weekly_schedule");
-        if (schedule == null) {
-            schedule = root.get("schedule");
-        }
-        if (schedule == null) {
-            schedule = root.get("items");
-        }
+        if (schedule == null) schedule = root.get("schedule");
+        if (schedule == null) schedule = root.get("items");
         if (schedule == null || !schedule.isArray()) {
             return List.of();
         }
@@ -1359,6 +1422,9 @@ public class WellnessFeatureService {
         return workouts.stream().limit(7).toList();
     }
 
+    // ---- 计划模板数据：3 种目标 × 7 天 ----
+
+    /** 按目标类型和种子轮转本地模板 */
     private List<PlanDayTemplate> localPlanTemplates(String goalType, long seed) {
         int offset = Math.floorMod((int) seed, 7);
         List<PlanDayTemplate> source = switch (goalType) {
@@ -1639,6 +1705,9 @@ public class WellnessFeatureService {
         return streak;
     }
 
+    // ---- 食物营养估算引擎 ----
+
+    /** 核心营养估算：关键词检测 → 数量解析 → 营养成分聚合 */
     private MealEstimate calculateMealEstimate(String foodName, String amount) {
         String combinedText = (foodName + " " + amount).toLowerCase(Locale.ROOT);
         List<FoodHit> hits = detectFoodHits(combinedText);
@@ -1885,10 +1954,13 @@ public class WellnessFeatureService {
         return rounded + unit;
     }
 
+    // ---- 规则库：23 条食物营养 ----
+
     private FoodRule mixedMealRule() {
         return new FoodRule("混合餐", List.of("meal", "餐", "饭"), 165, 8, 20, 5, 60, 300, "g");
     }
 
+    /** 食物规则：每 100g 热量/蛋白质/碳水/脂肪/健康分/默认量 */
     private List<FoodRule> foodRules() {
         return List.of(
                 new FoodRule("鸡胸肉", List.of("鸡胸肉", "鸡胸", "chicken breast"), 165, 31, 0, 3.6, 86, 120, "g"),
@@ -1916,6 +1988,8 @@ public class WellnessFeatureService {
                 new FoodRule("奶茶", List.of("奶茶", "milk tea"), 65, 1.2, 12, 1.6, 42, 500, "ml")
         );
     }
+
+    // ---- 规则库：8 种运动 MET ----
 
     private ExerciseRule exerciseRule(String exerciseType) {
         String text = exerciseType.toLowerCase(Locale.ROOT);
@@ -2073,30 +2147,24 @@ public class WellnessFeatureService {
         }
     }
 
+    // ---- 内部记录 ----
+
     private record FoodRule(String name, List<String> aliases, double caloriesPer100, double proteinPer100,
                             double carbsPer100, double fatPer100, int score, double defaultQuantity,
-                            String defaultUnit) {
-    }
+                            String defaultUnit) {}  // 食物营养规则
 
-    private record FoodHit(FoodRule rule, int index, String alias) {
-    }
+    private record FoodHit(FoodRule rule, int index, String alias) {}  // 食物匹配结果
 
-    private record ParsedQuantity(double grams, String unit, String display) {
-    }
+    private record ParsedQuantity(double grams, String unit, String display) {}  // 解析后的数量
 
     private record MealEstimate(int calories, double protein, double carbs, double fat, int healthScore,
-                                List<Map<String, Object>> items, List<String> unmatched, String confidence) {
-    }
+                                List<Map<String, Object>> items, List<String> unmatched, String confidence) {}  // 餐食估算
 
-    private record ExerciseRule(String name, List<String> aliases, double met, String suggestion) {
-    }
+    private record ExerciseRule(String name, List<String> aliases, double met, String suggestion) {}  // 运动规则
 
-    private record MealTemplate(String mealType, String title, String description, int calories) {
-    }
+    private record MealTemplate(String mealType, String title, String description, int calories) {}  // 餐食模板
 
-    private record WorkoutTemplate(String title, String description, int durationMin, String intensity) {
-    }
+    private record WorkoutTemplate(String title, String description, int durationMin, String intensity) {}  // 运动模板
 
-    private record PlanDayTemplate(String focus, List<MealTemplate> meals, WorkoutTemplate workout) {
-    }
+    private record PlanDayTemplate(String focus, List<MealTemplate> meals, WorkoutTemplate workout) {}  // 单日计划
 }

@@ -72,7 +72,10 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { featureApi } from '@/api/features'
+
+const router = useRouter()
 
 const alerts = ref([])
 const reminders = ref([])
@@ -120,8 +123,7 @@ async function doneReminder(id) {
 }
 
 function go(view) {
-  localStorage.setItem('activeView', view)
-  window.location.reload()
+  router.push('/' + view)
 }
 
 function severityText(severity) {

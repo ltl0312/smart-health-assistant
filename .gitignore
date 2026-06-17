@@ -8,6 +8,7 @@
 *.swo
 *~
 .DS_Store
+CLAUDE.md
 
 # ========================
 # Java / Maven
@@ -45,6 +46,7 @@ application-local.yml
 application.yml
 *.pem
 *.key
+docs/
 
 # ========================
 # OS
